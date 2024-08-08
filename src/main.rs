@@ -1,8 +1,5 @@
-use std::fmt::Display;
-use std::io::Write;
-use chrono::Local;
 use curl::easy::{Easy2, Handler, WriteError};
-use metero_wizard::{settings::url_config::{HourlyTempFromGround, UrlConfig}, weather_data::{self, weather_point::WeatherData}};
+use meteo_wizard::{settings::url_config::{HourlyTempFromGround, UrlConfig}, weather_data::weather_point::WeatherData};
 use serde_json::Value;
 use env_logger;
 
@@ -55,9 +52,12 @@ fn main() {
     let weather_data = WeatherData::parse_from(weather_json);
     match weather_data {
         Ok(weather_data) => {
-            let data_points = weather_data.houlry;
+
+            log::info!("\n{}\n",weather_data);
+            log::info!("{}",weather_data.hourly_units);
+            let data_points = weather_data.hourly;
             for weather_data_point in data_points{
-                println!("{:?}", weather_data_point);
+                log::info!("{}", weather_data_point.1);
             }
         }
         Err(error) => println!("{}", error),
