@@ -1,5 +1,4 @@
-use chrono::{DateTime, NaiveDateTime};
-use log::log;
+use chrono::NaiveDateTime;
 use core::fmt;
 use std::{collections::HashMap, str::FromStr};
 
@@ -13,7 +12,7 @@ pub enum WeatherDataError {
     ParseError,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct HourlyUnits {
     time: String,
     temperature_2m: String,
@@ -134,7 +133,27 @@ impl HourlyUnits {
     }
 }
 
-#[derive(Debug)]
+
+impl fmt::Display for HourlyUnits {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "|{:18}|{:18}|{:22}|{:26}|{:26}|{:19}|{:10}|{:15}|{:13}|{:12}|{:15}|",
+            format!("Time ({})", self.time),
+            format!("Temperature ({})", self.temperature_2m),
+            format!("Rel. Humidity ({})", self.relative_humidity_2m),
+            format!("Appr. Temperature ({})", self.apparent_temperature),
+            format!("Preci. Probability ({})", self.precipitation_probability),
+            format!("Precipitation ({})", self.precipitation),
+            format!("Rain ({})", self.rain),
+            format!("Showers ({})", self.showers),
+            format!("Snowfall ({})", self.snowfall),
+            self.weather_code.to_uppercase(),
+            format!("Visibility ({})", self.visibility),
+        )
+    }
+}
+#[derive(Debug, Clone)]
 pub struct WeatherDataPoint {
     time: String,
     temperature: f32,
@@ -146,8 +165,9 @@ pub struct WeatherDataPoint {
     showers: f32,
     snowfall: f32,
     weather_code: i32,
-    visibility: i32,
+    visibility: f64,
 }
+
 
 impl WeatherDataPoint {
     const TIME: &'static str = "time";
@@ -173,7 +193,7 @@ impl WeatherDataPoint {
         showers: f32,
         snowfall: f32,
         weather_code: i32,
-        visibility: i32,
+        visibility: f64,
     ) -> Self {
         Self {
             time,
@@ -211,7 +231,7 @@ impl fmt::Display for WeatherDataPoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}|{:.2}|{:.2}|{:.2}|{:.2}|{:.2}|{:.2}|{:.2}|{}|{}",
+            "|{:18}|{:18.2}|{:22.2}|{:26.2}|{:26.2}|{:19.2}|{:10.2}|{:15.2}|{:13.2}|{:12}|{:15.2}|",
             self.time,
             self.temperature,
             self.relative_humidity_2m,
@@ -220,6 +240,7 @@ impl fmt::Display for WeatherDataPoint {
             self.precipitation,
             self.rain,
             self.showers,
+            self.snowfall,
             self.weather_code,
             self.visibility
         )
@@ -233,21 +254,36 @@ pub struct WeatherData {
     generationtime_ms: f64,
     utc_offset_seconds: f64,
     timezone: String,
-    timezone_abbrevation: String,
+    timezone_abbreviation: String,
     elevation: f32,
-    hourly_units: HourlyUnits,
-    pub houlry: HashMap<i64, WeatherDataPoint>,
+    pub hourly_units: HourlyUnits,
+    pub hourly: HashMap<i64, WeatherDataPoint>,
+}
+
+impl fmt::Display for WeatherData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Latitude: {:4.3}\tLongitude: {:4.3}\t Generation Time: {:5.3}ms\nUTC Offset: {:15.5}\tTimezone: {:30}\nTimezone Abbreviation: {:10}\tElevation: {:10.2}",
+            self.latitude,
+            self.longitude,
+            self.generationtime_ms,
+            self.utc_offset_seconds,
+            self.timezone,
+            self.timezone_abbreviation,
+            self.elevation
+        )
+    }
 }
 
 impl WeatherData {
     const LATITUDE: &'static str = "latitude";
-    const LONGIUDE: &'static str = "longitude";
+    const LONGITUDE: &'static str = "longitude";
     const GENERATION_TIME_MS: &'static str = "generationtime_ms";
     const UTC_OFFSET_SECONDS: &'static str = "utc_offset_seconds";
     const TIMEZONE: &'static str = "timezone";
     const ELEVATION: &'static str = "elevation";
-    const TIMEZONE_ABBREVATION: &'static str = "timezone_abbreviation";
-    const TIMESTAMP: &'static str = "time";
+    const TIMEZONE_ABBREVIATION: &'static str = "timezone_abbreviation";
     const HOURLY_DATA: &'static str = "hourly";
     const HOURLY_UNITS: &'static str = "hourly_units";
 
@@ -257,21 +293,21 @@ impl WeatherData {
         generationtime_ms: f64,
         utc_offset_seconds: f64,
         timezone: String,
-        timezone_abbrevation: String,
+        timezone_abbreviation: String,
         elevation: f32,
         hourly_units: HourlyUnits,
-        houlry: HashMap<i64, WeatherDataPoint>,
+        hourly: HashMap<i64, WeatherDataPoint>,
     ) -> WeatherData {
         WeatherData {
             latitude: latitude,
             longitude: longitude,
-            generationtime_ms: generationtime_ms,
+            generationtime_ms,
             utc_offset_seconds: utc_offset_seconds,
             timezone: timezone,
-            timezone_abbrevation: timezone_abbrevation,
+            timezone_abbreviation: timezone_abbreviation,
             elevation: elevation,
             hourly_units: hourly_units,
-            houlry,
+            hourly,
         }
     }
 
@@ -282,7 +318,7 @@ impl WeatherData {
         };
         log::info!("Latitude: {}", latitude);
 
-        let longitude = match json_obj[Self::LONGIUDE].as_f64() {
+        let longitude = match json_obj[Self::LONGITUDE].as_f64() {
             Some(longitude) => longitude as f32,
             None => 0.0,
         };
@@ -306,7 +342,7 @@ impl WeatherData {
         };
         log::info!("timezone: {}", timezone);
 
-        let timezone_abbr = match json_obj[Self::TIMEZONE_ABBREVATION].as_str() {
+        let timezone_abbr = match json_obj[Self::TIMEZONE_ABBREVIATION].as_str() {
             Some(timezone_abbr) => timezone_abbr.to_string(),
             None => return Err(WeatherDataError::ParseError),
         };
@@ -334,9 +370,7 @@ impl WeatherData {
         let hourly_data = hourly_data.clone();
         let timestamps: &Vec<Value> = hourly_data[WeatherDataPoint::TIME].as_array().unwrap();
         let temperatures: &Vec<Value> = hourly_data[WeatherDataPoint::TEMPERATURE_2M].as_array().unwrap();
-        println!("{:?}",hourly_data);
         let relative_humidities: &Vec<Value> = hourly_data[WeatherDataPoint::RELATIVE_HUMIDITY_2M].as_array().unwrap();
-        log::info!("{:?}", relative_humidities);
         let apparent_temperatures = hourly_data[WeatherDataPoint::APPARENT_TEMPERATURE].as_array().unwrap();
         let precipitation_probabilities =
             hourly_data[WeatherDataPoint::PRECIPITATION_PROBABILITY].as_array().unwrap();
@@ -347,7 +381,7 @@ impl WeatherData {
         let weather_codes = hourly_data[WeatherDataPoint::WEATHER_CODE].as_array().unwrap();
         let visibilities = hourly_data[WeatherDataPoint::VISIBILITY].as_array().unwrap();
 
-        let hourly_data_uints = match HourlyUnits::parse_from(hourly_units) {
+        let hourly_data_units = match HourlyUnits::parse_from(hourly_units) {
             Ok(hourly_units) => hourly_units,
             Err(_) => return Err(WeatherDataError::ParseError),
         };
@@ -373,14 +407,12 @@ impl WeatherData {
                 .unwrap()
                 .as_u64()
                 .unwrap() as f32;
-            println!("{}", precipitations.len());
-            let precipitation = precipitations.get(pos).unwrap().as_u64().unwrap() as f32;
-
-            let rain = rains.get(pos).unwrap().as_i64().unwrap() as f32;
+            let precipitation = precipitations.get(pos).unwrap().as_f64().unwrap() as f32;
+            let rain = rains.get(pos).unwrap().as_f64().unwrap() as f32;
             let showers = showers_s.get(pos).unwrap().as_f64().unwrap() as f32;
             let snowfall = snowfalls.get(pos).unwrap().as_f64().unwrap() as f32;
             let weather_code = weather_codes.get(pos).unwrap().as_i64().unwrap() as i32;
-            let visibility = visibilities.get(pos).unwrap().as_i64().unwrap() as i32;
+            let visibility = visibilities.get(pos).unwrap().as_f64().unwrap() as f64;
             weather_data_points.insert(
                 timestamp_epoch,
                 WeatherDataPoint::new(
@@ -405,10 +437,10 @@ impl WeatherData {
             generationtime_ms,
             utc_offset_seconds,
             timezone: timezone.to_string(),
-            timezone_abbrevation: timezone_abbr,
+            timezone_abbreviation: timezone_abbr,
             elevation,
-            hourly_units: hourly_data_uints,
-            houlry: weather_data_points,
+            hourly_units: hourly_data_units,
+            hourly: weather_data_points,
         })
     }
 }
