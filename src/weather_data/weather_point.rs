@@ -8,8 +8,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum WeatherDataError {
-    #[error("Cannot parse wether data point")]
+    #[error("Cannot parse wether data")]
     ParseError,
+    #[error("Cannot parse wether data point")]
+    DatapointParseError,
 }
 
 #[derive(Debug)]
@@ -40,6 +42,7 @@ impl HourlyUnits {
     const WEATHER_CODE: &'static str = "weather_code";
     const VISIBILITY: &'static str = "visibility";
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         time: String,
         temperature_2m: String,
@@ -131,8 +134,51 @@ impl HourlyUnits {
             visibility_unit,
         ))
     }
-}
 
+    pub fn get_time_unit(self) -> String {
+        self.time
+    }
+
+    pub fn get_temperature_unit(self) -> String {
+        self.temperature_2m
+    }
+
+    pub fn get_relative_humidity_unit(self) -> String {
+        self.relative_humidity_2m
+    }
+
+    pub fn get_apparaent_temperature_unit(self) -> String {
+        self.apparent_temperature
+    }
+
+    pub fn get_precipitation_probability_unit(self) -> String {
+        self.precipitation_probability
+    }
+
+    pub fn get_precipitation_unit(self) -> String {
+        self.precipitation
+    }
+
+    pub fn get_rain_unit(self) -> String {
+        self.rain
+    }
+
+    pub fn get_showers_unit(self) -> String {
+        self.showers
+    }
+
+    pub fn get_snowfall_unit(self) -> String {
+        self.snowfall
+    }
+
+    pub fn get_weather_code_unit(self) -> String {
+        self.weather_code
+    }
+
+    pub fn get_visibility_unit(self) -> String {
+        self.visibility
+    }
+}
 
 impl fmt::Display for HourlyUnits {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -168,7 +214,6 @@ pub struct WeatherDataPoint {
     visibility: f64,
 }
 
-
 impl WeatherDataPoint {
     const TIME: &'static str = "time";
     const TEMPERATURE_2M: &'static str = "temperature_2m";
@@ -182,6 +227,7 @@ impl WeatherDataPoint {
     const WEATHER_CODE: &'static str = "weather_code";
     const VISIBILITY: &'static str = "visibility";
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         time: String,
         temperature: f32,
@@ -194,7 +240,7 @@ impl WeatherDataPoint {
         snowfall: f32,
         weather_code: i32,
         visibility: f64,
-    ) -> Self {
+    ) -> WeatherDataPoint {
         Self {
             time,
             temperature,
@@ -208,6 +254,49 @@ impl WeatherDataPoint {
             weather_code,
             visibility,
         }
+    }
+
+    pub fn get_time(self) -> String {
+        self.time
+    }
+
+    pub fn get_temperature(self) -> f32 {
+        self.temperature
+    }
+
+    pub fn get_relative_humidity_2m(self) -> i32 {
+        self.relative_humidity_2m
+    }
+    pub fn get_apparaent_temperature(self) -> f32 {
+        self.apparent_temperature
+    }
+
+    pub fn get_precipitation_probability(self) -> f32 {
+        self.precipitation_probability
+    }
+
+    pub fn get_precipitation(self) -> f32 {
+        self.precipitation
+    }
+
+    pub fn get_rain(self) -> f32 {
+        self.rain
+    }
+
+    pub fn get_showers(self) -> f32 {
+        self.showers
+    }
+
+    pub fn get_snowfall(self) -> f32 {
+        self.snowfall
+    }
+
+    pub fn get_weather_code(self) -> i32 {
+        self.weather_code
+    }
+
+    pub fn get_visibility(self) -> f64 {
+        self.visibility
     }
 }
 
@@ -249,8 +338,8 @@ impl fmt::Display for WeatherDataPoint {
 
 #[derive(Debug)]
 pub struct WeatherData {
-    latitude: f32,
-    longitude: f32,
+    latitude: f64,
+    longitude: f64,
     generationtime_ms: f64,
     utc_offset_seconds: f64,
     timezone: String,
@@ -264,7 +353,7 @@ impl fmt::Display for WeatherData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Latitude: {:4.3}\tLongitude: {:4.3}\t Generation Time: {:5.3}ms\nUTC Offset: {:15.5}\tTimezone: {:30}\nTimezone Abbreviation: {:10}\tElevation: {:10.2}",
+            "Latitude: {:4.3}°\tLongitude: {:4.3}°\t Generation Time: {:5.3}ms\nUTC Offset: {:15.5}\tTimezone: {:30}\nTimezone Abbreviation: {:10}\tElevation: {:10.2}m",
             self.latitude,
             self.longitude,
             self.generationtime_ms,
@@ -287,9 +376,10 @@ impl WeatherData {
     const HOURLY_DATA: &'static str = "hourly";
     const HOURLY_UNITS: &'static str = "hourly_units";
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        latitude: f32,
-        longitude: f32,
+        latitude: f64,
+        longitude: f64,
         generationtime_ms: f64,
         utc_offset_seconds: f64,
         timezone: String,
@@ -298,62 +388,62 @@ impl WeatherData {
         hourly_units: HourlyUnits,
         hourly: HashMap<i64, WeatherDataPoint>,
     ) -> WeatherData {
-        WeatherData {
-            latitude: latitude,
-            longitude: longitude,
+        Self {
+            latitude,
+            longitude,
             generationtime_ms,
-            utc_offset_seconds: utc_offset_seconds,
-            timezone: timezone,
-            timezone_abbreviation: timezone_abbreviation,
-            elevation: elevation,
-            hourly_units: hourly_units,
+            utc_offset_seconds,
+            timezone,
+            timezone_abbreviation,
+            elevation,
+            hourly_units,
             hourly,
         }
     }
 
     pub fn parse_from(json_obj: Value) -> Result<WeatherData, WeatherDataError> {
         let latitude = match json_obj[Self::LATITUDE].as_f64() {
-            Some(latitude) => latitude as f32,
-            None => 0.0,
+            Some(latitude) => latitude,
+            None => return Err(WeatherDataError::ParseError),
         };
-        log::info!("Latitude: {}", latitude);
+        log::debug!("Latitude: {}", latitude);
 
         let longitude = match json_obj[Self::LONGITUDE].as_f64() {
-            Some(longitude) => longitude as f32,
-            None => 0.0,
+            Some(longitude) => longitude,
+            None => return Err(WeatherDataError::ParseError),
         };
-        log::info!("Longitude: {}", longitude);
+        log::debug!("Longitude: {}", longitude);
 
         let generationtime_ms = match json_obj[Self::GENERATION_TIME_MS].as_f64() {
             Some(generationtime_ms) => generationtime_ms,
-            None => 0.0,
+            None => return Err(WeatherDataError::ParseError),
         };
-        log::info!("generationtime_ms: {}", generationtime_ms);
+        log::debug!("generationtime_ms: {}", generationtime_ms);
 
         let utc_offset_seconds = match json_obj[Self::UTC_OFFSET_SECONDS].as_f64() {
             Some(utc_offset_seconds) => utc_offset_seconds,
-            None => 0.0,
+            None => return Err(WeatherDataError::ParseError),
         };
-        log::info!("utc_offset_seconds: {}", utc_offset_seconds);
+        log::debug!("utc_offset_seconds: {}", utc_offset_seconds);
 
         let timezone = match json_obj[Self::TIMEZONE].as_str() {
             Some(timezone) => timezone,
             None => return Err(WeatherDataError::ParseError),
         };
-        log::info!("timezone: {}", timezone);
+        log::debug!("timezone: {}", timezone);
 
         let timezone_abbr = match json_obj[Self::TIMEZONE_ABBREVIATION].as_str() {
             Some(timezone_abbr) => timezone_abbr.to_string(),
             None => return Err(WeatherDataError::ParseError),
         };
 
-        log::info!("Timezone Abbreviation: {}", timezone_abbr);
+        log::debug!("Timezone Abbreviation: {}", timezone_abbr);
 
         let elevation = match json_obj[Self::ELEVATION].as_f64() {
             Some(elevation) => elevation as f32,
             None => 0.0,
         };
-        log::info!("elevation: {}", elevation);
+        log::debug!("elevation: {}", elevation);
 
         let binding = json_obj[Self::HOURLY_DATA].clone();
         let hourly_data = match binding.as_object() {
@@ -369,17 +459,30 @@ impl WeatherData {
 
         let hourly_data = hourly_data.clone();
         let timestamps: &Vec<Value> = hourly_data[WeatherDataPoint::TIME].as_array().unwrap();
-        let temperatures: &Vec<Value> = hourly_data[WeatherDataPoint::TEMPERATURE_2M].as_array().unwrap();
-        let relative_humidities: &Vec<Value> = hourly_data[WeatherDataPoint::RELATIVE_HUMIDITY_2M].as_array().unwrap();
-        let apparent_temperatures = hourly_data[WeatherDataPoint::APPARENT_TEMPERATURE].as_array().unwrap();
-        let precipitation_probabilities =
-            hourly_data[WeatherDataPoint::PRECIPITATION_PROBABILITY].as_array().unwrap();
-        let precipitations = hourly_data[WeatherDataPoint::PRECIPITATION].as_array().unwrap();
+        let temperatures: &Vec<Value> = hourly_data[WeatherDataPoint::TEMPERATURE_2M]
+            .as_array()
+            .unwrap();
+        let relative_humidities: &Vec<Value> = hourly_data[WeatherDataPoint::RELATIVE_HUMIDITY_2M]
+            .as_array()
+            .unwrap();
+        let apparent_temperatures = hourly_data[WeatherDataPoint::APPARENT_TEMPERATURE]
+            .as_array()
+            .unwrap();
+        let precipitation_probabilities = hourly_data[WeatherDataPoint::PRECIPITATION_PROBABILITY]
+            .as_array()
+            .unwrap();
+        let precipitations = hourly_data[WeatherDataPoint::PRECIPITATION]
+            .as_array()
+            .unwrap();
         let rains = hourly_data[WeatherDataPoint::RAIN].as_array().unwrap();
         let showers_s = hourly_data[WeatherDataPoint::SHOWERS].as_array().unwrap();
         let snowfalls = hourly_data[WeatherDataPoint::SNOWFALL].as_array().unwrap();
-        let weather_codes = hourly_data[WeatherDataPoint::WEATHER_CODE].as_array().unwrap();
-        let visibilities = hourly_data[WeatherDataPoint::VISIBILITY].as_array().unwrap();
+        let weather_codes = hourly_data[WeatherDataPoint::WEATHER_CODE]
+            .as_array()
+            .unwrap();
+        let visibilities = hourly_data[WeatherDataPoint::VISIBILITY]
+            .as_array()
+            .unwrap();
 
         let hourly_data_units = match HourlyUnits::parse_from(hourly_units) {
             Ok(hourly_units) => hourly_units,
@@ -412,7 +515,7 @@ impl WeatherData {
             let showers = showers_s.get(pos).unwrap().as_f64().unwrap() as f32;
             let snowfall = snowfalls.get(pos).unwrap().as_f64().unwrap() as f32;
             let weather_code = weather_codes.get(pos).unwrap().as_i64().unwrap() as i32;
-            let visibility = visibilities.get(pos).unwrap().as_f64().unwrap() as f64;
+            let visibility = visibilities.get(pos).unwrap().as_f64().unwrap();
             weather_data_points.insert(
                 timestamp_epoch,
                 WeatherDataPoint::new(

@@ -42,6 +42,7 @@ pub struct UrlConfig {
 }
 
 impl UrlConfig {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         latitude: f64,
         longitude: f64,
@@ -75,11 +76,66 @@ impl UrlConfig {
             past_days,
         }
     }
+    #[allow(clippy::too_many_arguments)]
+    pub fn build(
+        latitude: f64,
+        longitude: f64,
+        hourly_temp_gnd_level: HourlyTempFromGround,
+        relative_humidity_2m: bool,
+        apparent_temperature: bool,
+        precipitation_probability: bool,
+        precipitation: bool,
+        rain: bool,
+        showers: bool,
+        snowfall: bool,
+        weather_code: bool,
+        visibility: bool,
+        forecast_days: u32,
+        past_days: u32,
+    ) -> UrlConfig {
+        UrlConfig {
+            latitude,
+            longitude,
+            hourly_temp_gnd_level,
+            relative_humidity_2m,
+            apparent_temperature,
+            precipitation_probability,
+            precipitation,
+            rain,
+            showers,
+            snowfall,
+            weather_code,
+            visibility,
+            forecast_days,
+            past_days,
+        }
+    }
+
+    pub fn with_latitude(mut self, latitude: f64) -> Self {
+        self.latitude = latitude;
+        self
+    }
+
+    pub fn with_longitude(mut self, longitude: f64) -> Self {
+        self.longitude = longitude;
+        self
+    }
+
+    pub fn with_forecast_days(mut self, forecast_days: u32) -> Self {
+        self.forecast_days = forecast_days;
+        self
+    }
+
+    pub fn with_past_days(mut self, past_days: u32) -> Self {
+        self.past_days = past_days;
+        self
+    }
 }
 
-impl ToString for UrlConfig {
-    fn to_string(&self) -> String {
-        format!(
+impl fmt::Display for UrlConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
             "{}?latitude={:.3}&longitude&longitude={:.3}&{}{}{}{}{}{}{}{}{}{}{}{}",
             OPEN_METEO_API_URL,
             self.latitude,

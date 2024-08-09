@@ -1,22 +1,14 @@
-use curl::easy::{Easy2, Handler, WriteError};
-use meteo_wizard::{settings::url_config::{HourlyTempFromGround, UrlConfig}, weather_data::weather_point::WeatherData};
-use serde_json::Value;
-use env_logger;
-
-struct Collector(Vec<u8>);
-
-impl Handler for Collector {
-    fn write(&mut self, data: &[u8]) -> Result<usize, WriteError> {
-        self.0.extend_from_slice(data);
-        Ok(data.len())
-    }
-}
+use meteo_wizard::{
+    settings::url_config::{HourlyTempFromGround, UrlConfig},
+    weather_data::weather_point::WeatherData,
+    web_protocols::http_fetch,
+};
+use std::process::exit;
 
 fn main() {
-
     env_logger::builder()
-    .filter_level(log::LevelFilter::Info)
-    .init();
+        .filter_level(log::LevelFilter::Debug)
+        .init();
 
     let url_config = UrlConfig::new(
         40.6936,
@@ -31,36 +23,39 @@ fn main() {
         true,
         true,
         true,
-        0,
-        1,
+        2,
+        2,
     );
 
-    let mut easy = Easy2::new(Collector(Vec::new()));
-    println!("{}", url_config.to_string());
-    // Set the URL
-    easy.url(url_config.to_string().as_str()).unwrap();
-    easy.get(true).unwrap();
-    // Perform the request
-    easy.perform().unwrap();
+    let weather_data_str = match http_fetch::perform_http_get(url_config.to_string()) {
+        Ok(weather_data_string) => weather_data_string,
+        Err(error) => {
+            log::error!("Failed to fetch weather data: {:?}", error);
+            "".to_string()
+        }
+    };
 
-    assert_eq!(easy.response_code().unwrap(), 200);
-    let contents = easy.get_ref();
-    let weather_data_str = String::from_utf8(contents.0.clone()).unwrap();
+    if weather_data_str.is_empty() {
+        exit(-1)
+    }
 
-    let weather_json: Value = serde_json::from_str(&weather_data_str).unwrap();
+    let weather_json: serde_json::Value = serde_json::from_str(&weather_data_str).unwrap();
 
     let weather_data = WeatherData::parse_from(weather_json);
     match weather_data {
         Ok(weather_data) => {
-
-            log::info!("\n{}\n",weather_data);
-            log::info!("{}",weather_data.hourly_units);
+            log::debug!("\n{}\n", weather_data);
+            log::debug!("{}", weather_data.hourly_units);
             let data_points = weather_data.hourly;
-            for weather_data_point in data_points{
-                log::info!("{}", weather_data_point.1);
+
+            let mut sorted_time: Vec<&i64> = data_points.keys().collect();
+
+            sorted_time.sort();
+
+            for timestamp in sorted_time {
+                log::debug!("{}", data_points.get(timestamp).unwrap());
             }
         }
-        Err(error) => println!("{}", error),
+        Err(error) => log::error!("{}", error),
     }
-
 }
