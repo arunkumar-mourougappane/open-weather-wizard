@@ -546,7 +546,7 @@ impl WeatherData {
         };
 
         let timezone_tz: chrono_tz::Tz = match Tz::from_str(&timezone_abbr) {
-            Ok(timezone_tz) => timezone_tz.into(),
+            Ok(timezone_tz) => timezone_tz,
             Err(_) => return Err(WeatherDataError::DatapointParseError),
         };
 
