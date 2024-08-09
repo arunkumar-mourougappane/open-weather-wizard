@@ -1,8 +1,10 @@
 use chrono::NaiveDateTime;
 use core::fmt;
+use log::error;
 use std::{collections::HashMap, str::FromStr};
 
 use chrono_tz::Tz;
+use serde::Serialize;
 use serde_json::{Map, Value};
 use thiserror::Error;
 
@@ -12,9 +14,11 @@ pub enum WeatherDataError {
     ParseError,
     #[error("Cannot parse wether data point")]
     DatapointParseError,
+    #[error("Cannot parse wether data point")]
+    JsonSerializationError(#[from] serde_json::Error),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct HourlyUnits {
     time: String,
     temperature_2m: String,
@@ -178,6 +182,16 @@ impl HourlyUnits {
     pub fn get_visibility_unit(self) -> String {
         self.visibility
     }
+
+    pub fn to_json(self) -> Result<String, WeatherDataError> {
+        match serde_json::to_string(&self) {
+            Ok(json_string) => Ok(json_string),
+            Err(error) => {
+                log::error!("Failed to serializate data to JSON, error: {}", error);
+                Err(WeatherDataError::JsonSerializationError(error))
+            }
+        }
+    }
 }
 
 impl fmt::Display for HourlyUnits {
@@ -199,7 +213,7 @@ impl fmt::Display for HourlyUnits {
         )
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct WeatherDataPoint {
     time: String,
     temperature: f32,
@@ -298,6 +312,16 @@ impl WeatherDataPoint {
     pub fn get_visibility(self) -> f64 {
         self.visibility
     }
+
+    pub fn to_json(self) -> Result<String, WeatherDataError> {
+        match serde_json::to_string(&self) {
+            Ok(json_string) => Ok(json_string),
+            Err(error) => {
+                log::error!("Failed to serializate data to JSON, error: {}", error);
+                Err(WeatherDataError::JsonSerializationError(error))
+            }
+        }
+    }
 }
 
 impl PartialEq for WeatherDataPoint {
@@ -336,7 +360,7 @@ impl fmt::Display for WeatherDataPoint {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct WeatherData {
     latitude: f64,
     longitude: f64,
@@ -458,64 +482,179 @@ impl WeatherData {
         };
 
         let hourly_data = hourly_data.clone();
-        let timestamps: &Vec<Value> = hourly_data[WeatherDataPoint::TIME].as_array().unwrap();
-        let temperatures: &Vec<Value> = hourly_data[WeatherDataPoint::TEMPERATURE_2M]
-            .as_array()
-            .unwrap();
-        let relative_humidities: &Vec<Value> = hourly_data[WeatherDataPoint::RELATIVE_HUMIDITY_2M]
-            .as_array()
-            .unwrap();
-        let apparent_temperatures = hourly_data[WeatherDataPoint::APPARENT_TEMPERATURE]
-            .as_array()
-            .unwrap();
-        let precipitation_probabilities = hourly_data[WeatherDataPoint::PRECIPITATION_PROBABILITY]
-            .as_array()
-            .unwrap();
-        let precipitations = hourly_data[WeatherDataPoint::PRECIPITATION]
-            .as_array()
-            .unwrap();
-        let rains = hourly_data[WeatherDataPoint::RAIN].as_array().unwrap();
-        let showers_s = hourly_data[WeatherDataPoint::SHOWERS].as_array().unwrap();
-        let snowfalls = hourly_data[WeatherDataPoint::SNOWFALL].as_array().unwrap();
-        let weather_codes = hourly_data[WeatherDataPoint::WEATHER_CODE]
-            .as_array()
-            .unwrap();
-        let visibilities = hourly_data[WeatherDataPoint::VISIBILITY]
-            .as_array()
-            .unwrap();
+        let timestamps: &Vec<Value> = match hourly_data[WeatherDataPoint::TIME].as_array() {
+            Some(timestamps) => timestamps,
+            None => return Err(WeatherDataError::ParseError),
+        };
+
+        let temperatures: &Vec<Value> =
+            match hourly_data[WeatherDataPoint::TEMPERATURE_2M].as_array() {
+                Some(temperatures) => temperatures,
+                None => return Err(WeatherDataError::ParseError),
+            };
+
+        let relative_humidities: &Vec<Value> =
+            match hourly_data[WeatherDataPoint::RELATIVE_HUMIDITY_2M].as_array() {
+                Some(relative_humidities) => relative_humidities,
+                None => return Err(WeatherDataError::ParseError),
+            };
+
+        let apparent_temperatures =
+            match hourly_data[WeatherDataPoint::APPARENT_TEMPERATURE].as_array() {
+                Some(apparent_temperatures) => apparent_temperatures,
+                None => return Err(WeatherDataError::ParseError),
+            };
+
+        let precipitation_probabilities =
+            match hourly_data[WeatherDataPoint::PRECIPITATION_PROBABILITY].as_array() {
+                Some(precipitation_probabilities) => precipitation_probabilities,
+                None => return Err(WeatherDataError::ParseError),
+            };
+
+        let precipitations = match hourly_data[WeatherDataPoint::PRECIPITATION].as_array() {
+            Some(precipitations) => precipitations,
+            None => return Err(WeatherDataError::ParseError),
+        };
+        let rains = match hourly_data[WeatherDataPoint::RAIN].as_array() {
+            Some(rains) => rains,
+            None => return Err(WeatherDataError::ParseError),
+        };
+
+        let showers_s = match hourly_data[WeatherDataPoint::SHOWERS].as_array() {
+            Some(showers_s) => showers_s,
+            None => return Err(WeatherDataError::ParseError),
+        };
+
+        let snowfalls = match hourly_data[WeatherDataPoint::SNOWFALL].as_array() {
+            Some(snowfalls) => snowfalls,
+            None => return Err(WeatherDataError::ParseError),
+        };
+
+        let weather_codes = match hourly_data[WeatherDataPoint::WEATHER_CODE].as_array() {
+            Some(weather_codes) => weather_codes,
+            None => return Err(WeatherDataError::ParseError),
+        };
+
+        let visibilities = match hourly_data[WeatherDataPoint::VISIBILITY].as_array() {
+            Some(visibilities) => visibilities,
+            None => return Err(WeatherDataError::ParseError),
+        };
 
         let hourly_data_units = match HourlyUnits::parse_from(hourly_units) {
             Ok(hourly_units) => hourly_units,
             Err(_) => return Err(WeatherDataError::ParseError),
         };
 
-        let timezone_tz = Tz::from_str(&timezone_abbr).ok().unwrap();
+        let timezone_tz: chrono_tz::Tz = match Tz::from_str(&timezone_abbr) {
+            Ok(timezone_tz) => timezone_tz.into(),
+            Err(_) => return Err(WeatherDataError::DatapointParseError),
+        };
 
         let mut weather_data_points: HashMap<i64, WeatherDataPoint> = HashMap::new();
         for (pos, timestamp) in timestamps.iter().enumerate() {
-            let timestamp_str = timestamp.as_str().unwrap();
-            // Parse datetime without timezone
-            let naive_datetime =
-                NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%dT%H:%M").unwrap();
-            let localtime = naive_datetime.and_local_timezone(timezone_tz).unwrap();
-            let timestamp_epoch = localtime.timestamp();
+            let timestamp_str = match timestamp.as_str() {
+                Some(time_stamp) => time_stamp,
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
 
-            let temperature = temperatures.get(pos).unwrap().as_f64().unwrap() as f32;
-            let relative_humidity_2m =
-                relative_humidities.get(pos).unwrap().as_f64().unwrap() as i32;
-            let apparent_temperature =
-                apparent_temperatures.get(pos).unwrap().as_f64().unwrap() as f32;
-            let precipitation_probability = precipitation_probabilities
-                .get(pos)
-                .unwrap()
-                .as_u64()
-                .unwrap() as f32;
-            let precipitation = precipitations.get(pos).unwrap().as_f64().unwrap() as f32;
-            let rain = rains.get(pos).unwrap().as_f64().unwrap() as f32;
-            let showers = showers_s.get(pos).unwrap().as_f64().unwrap() as f32;
-            let snowfall = snowfalls.get(pos).unwrap().as_f64().unwrap() as f32;
-            let weather_code = weather_codes.get(pos).unwrap().as_i64().unwrap() as i32;
-            let visibility = visibilities.get(pos).unwrap().as_f64().unwrap();
+            // Parse datetime without timezone
+            let timestamp_epoch =
+                match NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%dT%H:%M") {
+                    Ok(naive_datetime) => match naive_datetime.and_local_timezone(timezone_tz) {
+                        chrono::offset::LocalResult::Single(localtime) => localtime.timestamp(),
+                        chrono::offset::LocalResult::Ambiguous(_earlier, latest) => {
+                            log::error!("Time stamp may not be accurate for {} ", timestamp_str);
+                            latest.timestamp()
+                        }
+                        chrono::offset::LocalResult::None => {
+                            return Err(WeatherDataError::DatapointParseError)
+                        }
+                    },
+                    Err(error) => {
+                        log::error!("Cannot parse time to epoch, error: {:?}", error);
+                        return Err(WeatherDataError::DatapointParseError);
+                    }
+                };
+
+            let temperature = match temperatures.get(pos) {
+                Some(temperature_unparsed) => match temperature_unparsed.as_f64() {
+                    Some(temperature_unparsed) => temperature_unparsed as f32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let relative_humidity_2m = match relative_humidities.get(pos) {
+                Some(relative_humidity) => match relative_humidity.as_f64() {
+                    Some(relative_humidity) => relative_humidity as i32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let apparent_temperature = match apparent_temperatures.get(pos) {
+                Some(app_temp) => match app_temp.as_f64() {
+                    Some(app_temp) => app_temp as f32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let precipitation_probability = match precipitation_probabilities.get(pos) {
+                Some(precip_prob) => match precip_prob.as_f64() {
+                    Some(precip_prob) => precip_prob as f32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let precipitation = match precipitations.get(pos) {
+                Some(prepcip) => match prepcip.as_f64() {
+                    Some(prepcip) => prepcip as f32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let rain = match rains.get(pos) {
+                Some(rains_data) => match rains_data.as_f64() {
+                    Some(rains_data) => rains_data as f32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let showers = match showers_s.get(pos) {
+                Some(shower_data) => match shower_data.as_f64() {
+                    Some(shower_data) => shower_data as f32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let snowfall = match snowfalls.get(pos) {
+                Some(snowfall_data) => match snowfall_data.as_f64() {
+                    Some(snowfall_data) => snowfall_data as f32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let weather_code = match weather_codes.get(pos) {
+                Some(weather_code_data) => match weather_code_data.as_i64() {
+                    Some(weather_code_data) => weather_code_data as i32,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
+
+            let visibility = match visibilities.get(pos) {
+                Some(visibility) => match visibility.as_f64() {
+                    Some(visibility) => visibility,
+                    None => return Err(WeatherDataError::DatapointParseError),
+                },
+                None => return Err(WeatherDataError::DatapointParseError),
+            };
             weather_data_points.insert(
                 timestamp_epoch,
                 WeatherDataPoint::new(
@@ -545,5 +684,15 @@ impl WeatherData {
             hourly_units: hourly_data_units,
             hourly: weather_data_points,
         })
+    }
+
+    pub fn to_json(self) -> Result<String, WeatherDataError> {
+        match serde_json::to_string(&self) {
+            Ok(json_string) => Ok(json_string),
+            Err(error) => {
+                log::error!("Failed to serializate data to JSON, error: {}", error);
+                Err(WeatherDataError::JsonSerializationError(error))
+            }
+        }
     }
 }
