@@ -36,10 +36,17 @@ fn main() {
     };
 
     if weather_data_str.is_empty() {
+        log::error!("Failed to fetch any data.");
         exit(-1)
     }
 
-    let weather_json: serde_json::Value = serde_json::from_str(&weather_data_str).unwrap();
+    let weather_json: serde_json::Value = match serde_json::from_str(&weather_data_str) {
+        Ok(weather_json) => weather_json,
+        Err(_) => {
+            log::error!("cannot parse json data");
+            exit(-3);
+        },
+    };
 
     let weather_data = WeatherData::parse_from(weather_json);
     match weather_data {
@@ -49,11 +56,12 @@ fn main() {
             let data_points = weather_data.hourly;
 
             let mut sorted_time: Vec<&i64> = data_points.keys().collect();
-
             sorted_time.sort();
-
             for timestamp in sorted_time {
-                log::debug!("{}", data_points.get(timestamp).unwrap());
+                log::debug!("{}", match data_points.get(timestamp) {
+                    Some(data_point) => data_point,
+                    None => exit(-3)
+                })
             }
         }
         Err(error) => log::error!("{}", error),
