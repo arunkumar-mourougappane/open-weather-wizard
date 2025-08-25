@@ -1,69 +1,64 @@
-use meteo_wizard::{
-    settings::url_config::{HourlyTempFromGround, UrlConfig},
-    weather_data::weather_point::WeatherData,
-    web_protocols::http_fetch,
-};
-use std::process::exit;
+mod ui;
 
-fn main() {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
-        .init();
+use glib;
+use gtk4::prelude::*; // Import necessary traits for GTK widgets
+use gtk4::{Application, ApplicationWindow};
+use gtk4::gio::MenuModel;
+use gtk4::PopoverMenuBar; // For glib::ExitCode
+use ui::build_elements::{build_button, build_main_menu, build_spinner, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT};
 
-    let url_config = UrlConfig::new(
-        40.6936,
-        89.5890,
-        HourlyTempFromGround::TempAt2m,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        2,
-        2,
-    );
+fn build_main_ui() -> Application {
+    // Create a new GTK application
+    let application = Application::builder()
+        .application_id("com.example.FirstGtkApp") // Unique application ID
+        .build();
+    application.connect_activate(|app| {
+        // Create a new application window
+        let window = ApplicationWindow::builder()
+            .application(app) // Associate the window with the application
+            .title("Weahter Wizard") // Set the window title
+            .default_width(DEFAULT_WINDOW_WIDTH)
+            .default_height(DEFAULT_WINDOW_HEIGHT)
+            .build();
+        window.present();
 
-    let weather_data_str = match http_fetch::perform_http_get(url_config.to_string()) {
-        Ok(weather_data_string) => weather_data_string,
-        Err(error) => {
-            log::error!("Failed to fetch weather data: {:?}", error);
-            "".to_string()
-        }
-    };
+        // Create root menu and add submenus
+        let root_menu = build_main_menu();
 
-    if weather_data_str.is_empty() {
-        log::error!("Failed to fetch any data.");
-        exit(-1)
-    }
+        // Convert to MenuModel
+        let menu_model: MenuModel = root_menu.into();
 
-    let weather_json: serde_json::Value = match serde_json::from_str(&weather_data_str) {
-        Ok(weather_json) => weather_json,
-        Err(_) => {
-            log::error!("cannot parse json data");
-            exit(-3);
-        },
-    };
+        // Create PopoverMenuBar
+        let menubar = PopoverMenuBar::from_model(Some(&menu_model));
 
-    let weather_data = WeatherData::parse_from(weather_json);
-    match weather_data {
-        Ok(weather_data) => {
-            log::debug!("\n{}\n", weather_data);
-            log::debug!("{}", weather_data.hourly_units);
-            let data_points = weather_data.hourly;
+        // Add menubar to the window (e.g., within a Box)
+        let vbox = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .build();
+        vbox.append(&menubar);
+        // Add other widgets to vbox as needed
 
-            let mut sorted_time: Vec<&i64> = data_points.keys().collect();
-            sorted_time.sort();
-            for timestamp in sorted_time {
-                log::debug!("{}", match data_points.get(timestamp) {
-                    Some(data_point) => data_point,
-                    None => exit(-3)
-                })
-            }
-        }
-        Err(error) => log::error!("{}", error),
-    }
+        // Create a button
+        let button = build_button("Click Me".to_string());
+        // Add the button to the window
+        vbox.append(&button);
+
+        // Create and add a spinner
+        let spinner = build_spinner();
+        vbox.append(&spinner);
+        spinner.start(); // Start the spinner animation
+        spinner.set_visible(true); // Make the spinner visible
+        window.set_child(Some(&vbox));
+        // Present the window to the user
+        window.present();
+    });
+    application
+}
+
+fn main() -> glib::ExitCode {
+    let application: Application = build_main_ui();
+    // Connect the "activate" signal to a closure that builds the UI
+
+    // Run the application
+    application.run()
 }

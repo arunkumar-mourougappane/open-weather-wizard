@@ -1,0 +1,24 @@
+/* src/style.css */
+
+/* Style for the main weather emoji */
+.weather-symbol {
+    font-size: 80px;
+    font-weight: bold;
+}
+
+/* Style for the temperature reading */
+.weather-temp {
+    font-size: 30px;
+    font-weight: bold;
+}
+
+/* Style for the text description (e.g., "broken clouds") */
+.weather-description {
+    font-size: 18px;
+    font-style: italic;
+}
+
+/* Style for the humidity reading */
+.weather-humidity {
+    font-size: 14px;
+}
