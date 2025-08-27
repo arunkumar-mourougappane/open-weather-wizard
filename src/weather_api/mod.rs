@@ -1,2 +1,1 @@
-pub mod openweather;
-pub mod weather_api;
+pub mod openweather_api;

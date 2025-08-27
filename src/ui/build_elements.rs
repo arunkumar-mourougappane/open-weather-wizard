@@ -4,14 +4,12 @@ use gtk4::gio::{Menu, MenuItem};
 use gtk4::{self as gtk, Spinner}; // For glib::ExitCode
 use gtk::Label;
 
-use crate::weather_api;
-
-use weather_api::openweather::ApiResponse;
+use crate::weather_api::openweather_api;
 
 pub const DEFAULT_WINDOW_WIDTH: i32 = 720;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
 
-pub fn build_spinner() -> gtk::Spinner {
+pub fn build_spinner(diameter: i32) -> gtk::Spinner {
     let spinner = Spinner::builder()
         .spinning(false) // Initially not spinning
         .visible(false) // Initially hidden
@@ -19,7 +17,7 @@ pub fn build_spinner() -> gtk::Spinner {
         .margin_bottom(10)
         .build();
 
-    spinner.set_size_request(100, 100);
+    spinner.set_size_request(diameter, diameter);
 
     spinner
 }
@@ -47,46 +45,40 @@ pub fn build_main_menu() -> Menu {
 
 pub fn build_button(label: String) -> Button {
     // Create a button with a label
-    let button = Button::builder()
+    
+
+    Button::builder()
         .label(label.as_str())
         .margin_top(12)
         .margin_bottom(12)
         .margin_start(12)
         .margin_end(12)
-        .build();
-
-    // Connect the "clicked" signal of the button to a closure
-    button.connect_clicked(|button| {
-        // Change the button's label when clicked
-        button.set_label("Hello World!");
-    });
-
-    button
+        .build()
 }
 
-pub fn build_entry() -> gtk::Entry {
-    let entry = gtk::Entry::builder()
-        .placeholder_text("Enter city name")
+pub fn build_entry(label: String) -> gtk::Entry {
+    
+
+    gtk::Entry::builder()
+        .placeholder_text(label.as_str())
         .margin_top(12)
         .margin_bottom(12)
         .margin_start(12)
         .margin_end(12)
-        .build();
-
-    entry
+        .build()
 }
 
 /// Updates the UI labels with the fetched weather data.
-fn update_ui_with_weather(
-    weather_data: &ApiResponse,
+pub fn update_ui_with_weather(
+    weather_data: &openweather_api::ApiResponse,
     symbol_label: &Label,
     temp_label: &Label,
     desc_label: &Label,
     humidity_label: &Label,
 ) {
-    if let Some(weather) = weather_data.weather.get(0) {
+    if let Some(weather) = weather_data.weather.first() {
         // Update labels with formatted data
-        symbol_label.set_text(crate::weather_api::openweather::get_weather_symbol(&weather.main));
+        symbol_label.set_text(openweather_api::get_weather_symbol(&weather.main));
         temp_label.set_text(&format!("{:.1}°C", weather_data.main.temp));
         desc_label.set_text(&weather.description);
         humidity_label.set_text(&format!("Humidity: {}%", weather_data.main.humidity));

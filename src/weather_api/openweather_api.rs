@@ -38,9 +38,8 @@
 //! ```
 use reqwest;
 use serde::Deserialize;
-mod weather_api;
 
-const api_key: &str = "a836db2d273c0b50a2376d6a31750064"; // Replace with your actual OpenWeatherMap API key
+const API_KEY: &str = "a836db2d273c0b50a2376d6a31750064"; // Replace with your actual OpenWeatherMap API key
 
 /// Represents weather conditions returned by the OpenWeatherMap API.
 ///
@@ -80,6 +79,7 @@ pub struct Main {
 /// - `main`: A `Main` struct containing key meteorological data such as temperature and humidity.
 /// - `name`: The name of the city corresponding to the weather data.
 #[derive(Deserialize, Debug)]
+#[allow(dead_code)]
 pub struct ApiResponse {
     pub weather: Vec<Weather>,
     pub main: Main,
@@ -96,6 +96,7 @@ pub struct ApiResponse {
 ///
 /// Use this type to handle errors gracefully and provide informative feedback to users.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum ApiError {
     RequestFailed(reqwest::Error),
     CityNotFound,
@@ -109,7 +110,7 @@ pub struct Location {
     pub name: String,
     pub lat: f64,
     pub lon: f64,
-    pub country: String,
+    pub country: Option<String>,
     // Use `Option` for state, as it may not always be present in the response.
     pub state: Option<String>,
 }
@@ -143,9 +144,8 @@ async fn get_coords(city: &str, state: &str, country: &str) -> Result<Location, 
     // Construct the full API URL. `limit=1` ensures we get only the most relevant result.
     let url = format!(
         "http://api.openweathermap.org/geo/1.0/direct?q={}&limit=1&appid={}",
-        location_query, api_key
+        location_query, API_KEY
     );
-
     // Make the request and parse the JSON response into a Vec of Locations.
     // The API returns an array, even if it's empty or has one item.
     let locations = reqwest::get(&url)
@@ -154,7 +154,7 @@ async fn get_coords(city: &str, state: &str, country: &str) -> Result<Location, 
         .json::<Vec<Location>>()
         .await
         .map_err(GeocodeError::RequestFailed)?;
-
+    log::info!("Geocoding response: {:?}", locations);
     // The API returns an empty array `[]` if the location isn't found.
     // We take the first element if it exists, otherwise return a `LocationNotFound` error.
     locations
@@ -176,38 +176,49 @@ pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
     let weather_location = get_coords(
         &location.name,
         location.state.as_deref().unwrap_or(""),
-        &location.country,
+        &location.country.clone().unwrap_or("".to_string()),
     )
     .await
     .map_err(|e| match e {
-        GeocodeError::RequestFailed(err) => ApiError::RequestFailed(err),
-        GeocodeError::LocationNotFound => ApiError::CityNotFound,
+        GeocodeError::RequestFailed(err) => {
+            println!("Error fetching coordinates: {:?}", err);
+            ApiError::RequestFailed(err)
+        },
+        GeocodeError::LocationNotFound => {
+            println!("Location not found");
+            ApiError::CityNotFound
+        },
     })?;
 
     // Construct the API URL. We use metric units for Celsius.
     let url = format!(
         "https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}&units=metric",
-        weather_location.lat, weather_location.lon, api_key
+        weather_location.lat, weather_location.lon, API_KEY
     );
 
     // Make the asynchronous GET request
     let response = reqwest::get(&url).await.map_err(ApiError::RequestFailed)?;
-
+    log::info!("Weather API response: {}", response.status());
     // Check if the request was successful (e.g., status 200 OK)
     if response.status().is_success() {
         // Try to parse the JSON response into our ApiResponse struct
         response
             .json::<ApiResponse>()
             .await
-            .map_err(|_| ApiError::InvalidResponse)
+            .map_err(|_| {
+                log::error!("Failed to parse API response");
+                ApiError::InvalidResponse
+            })
     } else {
         // If the city is not found, the API returns a 404 status
+        log::error!("City not found: {}", location.name);
         Err(ApiError::CityNotFound)
     }
 }
 
 /// Returns an emoji symbol based on the main weather condition string.
 pub fn get_weather_symbol(weather_condition: &str) -> &str {
+    log::info!("Mapping weather condition '{}' to symbol", weather_condition);
     match weather_condition {
         "Clear" => "☀️",
         "Clouds" => "☁️",
