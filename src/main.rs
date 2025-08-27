@@ -1,11 +1,43 @@
-mod ui;
-
-use glib;
-use gtk4::prelude::*; // Import necessary traits for GTK widgets
-use gtk4::{Application, ApplicationWindow};
+//! # Weather Wizard GTK Application
+//!
+//! This file contains the main entry point and UI setup for the Weather Wizard application,
+//! built using GTK4 and Rust. The application demonstrates how to create a GTK application
+//! window, set up a menu bar, and add interactive widgets such as buttons and spinners.
+//!
+//! ## Modules and Functions
+//!
+//! - Imports necessary GTK4 and GLib traits and types.
+//! - Uses custom UI builder functions from the `build_elements` module.
+//!
+//! ### `build_main_ui`
+//! Creates and configures the main GTK application, sets up the window, menu bar, and widgets.
+//!
+//! ### `main`
+//! Entry point of the application. Runs the GTK application and returns the exit code.
+//!
+//! ## Widgets
+//!
+//! - **Menu Bar:** Built using `PopoverMenuBar` and a custom menu model.
+//! - **Button:** Created with a custom builder function.
+//! - **Spinner:** Created and started to indicate loading or processing.
+//!
+//! ## Usage
+//!
+//! Run the application to launch the Weather Wizard UI window.
+use log::{self, LevelFilter};
+use env_logger::{self, Builder};
+use gtk4::PopoverMenuBar;
 use gtk4::gio::MenuModel;
-use gtk4::PopoverMenuBar; // For glib::ExitCode
-use ui::build_elements::{build_button, build_main_menu, build_spinner, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT};
+use gtk4::{Application, ApplicationWindow};
+use gtk4::{Label, prelude::*}; // Import necessary traits for GTK widgets
+mod ui;
+mod weather_api;
+use ui::build_elements::{
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_main_menu, build_spinner, build_entry
+};
+
+use crate::ui::build_elements::update_ui_with_weather;
+use crate::weather_api::openweather_api::{self, ApiError, Location}; // For glib::ExitCode
 
 fn build_main_ui() -> Application {
     // Create a new GTK application
@@ -35,19 +67,126 @@ fn build_main_ui() -> Application {
         let vbox = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .build();
+
+        let location_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .build();
+
         vbox.append(&menubar);
+        vbox.append(&location_box);
         // Add other widgets to vbox as needed
+        // Create and add entry fields
+        let city_entry = build_entry("City".to_string());
+        location_box.append(&city_entry);
+        // State and Country entries
+        let state_entry = build_entry("State".to_string());
+        location_box.append(&state_entry);
+        let country_entry = build_entry("Country".to_string());
+        location_box.append(&country_entry);
+
+        // Labels for displaying weather data
+        let weather_symbol_label = Label::new(Some("❓"));
+        let temp_label = Label::new(Some("--°C"));
+        let description_label = Label::new(Some("Enter a city to begin"));
+        let humidity_label = Label::new(Some("Humidity: --%"));
+
+        // Add CSS classes for styling
+        weather_symbol_label.add_css_class("weather-symbol");
+        description_label.add_css_class("weather-description");
+        temp_label.add_css_class("weather-temp");
+        humidity_label.add_css_class("weather-humidity");
 
         // Create a button
-        let button = build_button("Click Me".to_string());
+        let weather_button = build_button("Get Weather".to_string());
         // Add the button to the window
-        vbox.append(&button);
+        vbox.append(&weather_button);
 
         // Create and add a spinner
-        let spinner = build_spinner();
+        let spinner: gtk4::Spinner = build_spinner(40);
         vbox.append(&spinner);
-        spinner.start(); // Start the spinner animation
-        spinner.set_visible(true); // Make the spinner visible
+
+                // Arrange widgets vertically in a Box container
+        let main_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(6)
+            .margin_top(12)
+            .margin_bottom(12)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+
+        main_box.append(&weather_symbol_label);
+        main_box.append(&temp_label);
+        main_box.append(&description_label);
+        main_box.append(&humidity_label);
+        main_box.append(&city_entry);
+
+        weather_button.connect_clicked(move |_| {
+            // Clone the widgets that we need to modify inside the button's click handler
+            let city_entry_clone = city_entry.clone();
+            let state_entry_clone = state_entry.clone();
+            let country_entry_clone = country_entry.clone();
+            let temp_label_clone = temp_label.clone();
+            let description_label_clone = description_label.clone();
+            let humidity_label_clone = humidity_label.clone();
+            let weather_symbol_label_clone = weather_symbol_label.clone();
+            let spinner = spinner.clone();
+            // Get the city name from the entry field
+            let city = city_entry_clone.text().to_string();
+            if city.is_empty() {
+                return;
+            }
+            let state = state_entry_clone.text().to_string();
+            if state.is_empty() {
+                return;
+            }
+            let country = country_entry_clone.text().to_string();
+            if country.is_empty() {
+                return;
+            }
+
+            // Use glib::spawn_future_local to run our async API call without blocking the UI
+            glib::spawn_future_local(async move {
+                spinner.start(); // Start the spinner animation
+                spinner.set_visible(true); // Make the spinner visible
+                description_label_clone.set_text("Fetching weather...");
+                let location = Location {
+                    state: Some(state.clone()),
+                    country: Some(country.clone()),
+                    name: city.clone(),
+                    lat: 0.0,
+                    lon: 0.0,
+                };
+                // Call our function from the `api` module
+                let result = openweather_api::get_weather(&location).await;
+                spinner.stop(); // Stop the spinner animation
+                spinner.set_visible(false); // Hide the spinner
+                match result {
+                    Ok(weather_data) => {
+                        update_ui_with_weather(
+                            &weather_data,
+                            &weather_symbol_label_clone,
+                            &temp_label_clone,
+                            &description_label_clone,
+                            &humidity_label_clone,
+                        );
+                    }
+                    Err(e) => {
+                        let error_message = match e {
+                            ApiError::CityNotFound => "City not found.",
+                            ApiError::RequestFailed(_) => "Network request failed.",
+                            ApiError::InvalidResponse => "Could not parse server response.",
+                        };
+                        description_label_clone.set_text(error_message);
+                        weather_symbol_label_clone.set_text("⚠️");
+                    }
+                }
+            });
+        });
+
+
+
+        vbox.append(&main_box);
         window.set_child(Some(&vbox));
         // Present the window to the user
         window.present();
@@ -55,10 +194,20 @@ fn build_main_ui() -> Application {
     application
 }
 
-fn main() -> glib::ExitCode {
+#[tokio::main] 
+async fn main() -> glib::ExitCode {
+    Builder::new()
+        // Set the default log level to `info` if RUST_LOG is not set
+        .filter_level(LevelFilter::Info)
+        // You can also specifically filter certain modules
+        .filter_module("noisy_crate", LevelFilter::Warn)
+        .init();
+
+    log::info!("Starting Weather Wizard application");
     let application: Application = build_main_ui();
     // Connect the "activate" signal to a closure that builds the UI
 
     // Run the application
     application.run()
 }
+
