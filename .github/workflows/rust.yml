@@ -9,13 +9,55 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel.
 jobs:
   build:
-
+    # The type of runner that the job will run on.
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
+      # 1. Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it.
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # 2. Install GTK4 and its dependencies.
+      # This is the most critical step for a gtk4-rs application.
+      # It uses apt-get to install the C libraries needed to compile GTK.
+      - name: Install GTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev build-essential pkg-config
+
+      # 3. Install the Rust toolchain with rustup.
+      # This action also adds `clippy` and `rustfmt` components.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      # 4. Cache Cargo dependencies to speed up future builds.
+      # It caches the cargo registry, git dependencies, and the target/debug directory.
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # 5. Check code formatting.
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      # 6. Run Clippy for linting.
+      # The `-D warnings` flag treats all warnings as errors, failing the build.
+      - name: Run Clippy
+        run: cargo clippy -- -D warnings
+
+      # 7. Build the application in release mode.
+      # The --locked flag ensures Cargo.lock is used, providing reproducible builds.
+      - name: Build application
+        run: cargo build --release 
