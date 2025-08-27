@@ -1,69 +1,211 @@
-use meteo_wizard::{
-    settings::url_config::{HourlyTempFromGround, UrlConfig},
-    weather_data::weather_point::WeatherData,
-    web_protocols::http_fetch,
+//! # Weather Wizard GTK Application
+//!
+//! This file contains the main entry point and UI setup for the Weather Wizard application,
+//! built using GTK4 and Rust. The application demonstrates how to create a GTK application
+//! window, set up a menu bar, and add interactive widgets such as buttons and spinners.
+//!
+//! ## Modules and Functions
+//!
+//! - Imports necessary GTK4 and GLib traits and types.
+//! - Uses custom UI builder functions from the `build_elements` module.
+//!
+//! ### `build_main_ui`
+//! Creates and configures the main GTK application, sets up the window, menu bar, and widgets.
+//!
+//! ### `main`
+//! Entry point of the application. Runs the GTK application and returns the exit code.
+//!
+//! ## Widgets
+//!
+//! - **Menu Bar:** Built using `PopoverMenuBar` and a custom menu model.
+//! - **Button:** Created with a custom builder function.
+//! - **Spinner:** Created and started to indicate loading or processing.
+//!
+//! ## Usage
+//!
+//! Run the application to launch the Weather Wizard UI window.
+use env_logger::{self, Builder};
+use gtk4::PopoverMenuBar;
+use gtk4::gio::MenuModel;
+use gtk4::{Application, ApplicationWindow};
+use gtk4::{Label, prelude::*};
+use log::{self, LevelFilter}; // Import necessary traits for GTK widgets
+mod ui;
+mod weather_api;
+use ui::build_elements::{
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_entry, build_main_menu,
+    build_spinner,
 };
-use std::process::exit;
 
-fn main() {
-    env_logger::builder()
-        .filter_level(log::LevelFilter::Debug)
+use crate::ui::build_elements::update_ui_with_weather;
+use crate::weather_api::openweather_api::{self, ApiError, Location}; // For glib::ExitCode
+
+fn build_main_ui() -> Application {
+    // Create a new GTK application
+    let application = Application::builder()
+        .application_id("com.example.FirstGtkApp") // Unique application ID
+        .build();
+    application.connect_activate(|app| {
+        // Create a new application window
+        let window = ApplicationWindow::builder()
+            .application(app) // Associate the window with the application
+            .title("Weahter Wizard") // Set the window title
+            .default_width(DEFAULT_WINDOW_WIDTH)
+            .default_height(DEFAULT_WINDOW_HEIGHT)
+            .build();
+        window.present();
+
+        // Create root menu and add submenus
+        let root_menu = build_main_menu();
+
+        // Convert to MenuModel
+        let menu_model: MenuModel = root_menu.into();
+
+        // Create PopoverMenuBar
+        let menubar = PopoverMenuBar::from_model(Some(&menu_model));
+
+        // Add menubar to the window (e.g., within a Box)
+        let vbox = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .build();
+
+        let location_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .build();
+
+        vbox.append(&menubar);
+        vbox.append(&location_box);
+        // Add other widgets to vbox as needed
+        // Create and add entry fields
+        let city_entry = build_entry("City".to_string());
+        location_box.append(&city_entry);
+        // State and Country entries
+        let state_entry = build_entry("State".to_string());
+        location_box.append(&state_entry);
+        let country_entry = build_entry("Country".to_string());
+        location_box.append(&country_entry);
+
+        // Labels for displaying weather data
+        let weather_symbol_label = Label::new(Some("❓"));
+        let temp_label = Label::new(Some("--°C"));
+        let description_label = Label::new(Some("Enter a city to begin"));
+        let humidity_label = Label::new(Some("Humidity: --%"));
+
+        // Add CSS classes for styling
+        weather_symbol_label.add_css_class("weather-symbol");
+        description_label.add_css_class("weather-description");
+        temp_label.add_css_class("weather-temp");
+        humidity_label.add_css_class("weather-humidity");
+
+        // Create a button
+        let weather_button = build_button("Get Weather".to_string());
+        // Add the button to the window
+        vbox.append(&weather_button);
+
+        // Create and add a spinner
+        let spinner: gtk4::Spinner = build_spinner(40);
+        vbox.append(&spinner);
+
+        // Arrange widgets vertically in a Box container
+        let main_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .spacing(6)
+            .margin_top(12)
+            .margin_bottom(12)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+
+        main_box.append(&weather_symbol_label);
+        main_box.append(&temp_label);
+        main_box.append(&description_label);
+        main_box.append(&humidity_label);
+        main_box.append(&city_entry);
+
+        weather_button.connect_clicked(move |_| {
+            // Clone the widgets that we need to modify inside the button's click handler
+            let city_entry_clone = city_entry.clone();
+            let state_entry_clone = state_entry.clone();
+            let country_entry_clone = country_entry.clone();
+            let temp_label_clone = temp_label.clone();
+            let description_label_clone = description_label.clone();
+            let humidity_label_clone = humidity_label.clone();
+            let weather_symbol_label_clone = weather_symbol_label.clone();
+            let spinner = spinner.clone();
+            // Get the city name from the entry field
+            let city = city_entry_clone.text().to_string();
+            if city.is_empty() {
+                return;
+            }
+            let state = state_entry_clone.text().to_string();
+            if state.is_empty() {
+                return;
+            }
+            let country = country_entry_clone.text().to_string();
+            if country.is_empty() {
+                return;
+            }
+
+            // Use glib::spawn_future_local to run our async API call without blocking the UI
+            glib::spawn_future_local(async move {
+                spinner.start(); // Start the spinner animation
+                spinner.set_visible(true); // Make the spinner visible
+                description_label_clone.set_text("Fetching weather...");
+                let location = Location {
+                    state: Some(state.clone()),
+                    country: Some(country.clone()),
+                    name: city.clone(),
+                    lat: 0.0,
+                    lon: 0.0,
+                };
+                // Call our function from the `api` module
+                let result = openweather_api::get_weather(&location).await;
+                spinner.stop(); // Stop the spinner animation
+                spinner.set_visible(false); // Hide the spinner
+                match result {
+                    Ok(weather_data) => {
+                        update_ui_with_weather(
+                            &weather_data,
+                            &weather_symbol_label_clone,
+                            &temp_label_clone,
+                            &description_label_clone,
+                            &humidity_label_clone,
+                        );
+                    }
+                    Err(e) => {
+                        let error_message = match e {
+                            ApiError::CityNotFound => "City not found.",
+                            ApiError::RequestFailed(_) => "Network request failed.",
+                            ApiError::InvalidResponse => "Could not parse server response.",
+                        };
+                        description_label_clone.set_text(error_message);
+                        weather_symbol_label_clone.set_text("⚠️");
+                    }
+                }
+            });
+        });
+
+        vbox.append(&main_box);
+        window.set_child(Some(&vbox));
+        // Present the window to the user
+        window.present();
+    });
+    application
+}
+
+#[tokio::main]
+async fn main() -> glib::ExitCode {
+    Builder::new()
+        // Set the default log level to `info` if RUST_LOG is not set
+        .filter_level(LevelFilter::Info)
+        // You can also specifically filter certain modules
+        .filter_module("noisy_crate", LevelFilter::Warn)
         .init();
 
-    let url_config = UrlConfig::new(
-        40.6936,
-        89.5890,
-        HourlyTempFromGround::TempAt2m,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        2,
-        2,
-    );
+    log::info!("Starting Weather Wizard application");
+    let application: Application = build_main_ui();
+    // Connect the "activate" signal to a closure that builds the UI
 
-    let weather_data_str = match http_fetch::perform_http_get(url_config.to_string()) {
-        Ok(weather_data_string) => weather_data_string,
-        Err(error) => {
-            log::error!("Failed to fetch weather data: {:?}", error);
-            "".to_string()
-        }
-    };
-
-    if weather_data_str.is_empty() {
-        log::error!("Failed to fetch any data.");
-        exit(-1)
-    }
-
-    let weather_json: serde_json::Value = match serde_json::from_str(&weather_data_str) {
-        Ok(weather_json) => weather_json,
-        Err(_) => {
-            log::error!("cannot parse json data");
-            exit(-3);
-        },
-    };
-
-    let weather_data = WeatherData::parse_from(weather_json);
-    match weather_data {
-        Ok(weather_data) => {
-            log::debug!("\n{}\n", weather_data);
-            log::debug!("{}", weather_data.hourly_units);
-            let data_points = weather_data.hourly;
-
-            let mut sorted_time: Vec<&i64> = data_points.keys().collect();
-            sorted_time.sort();
-            for timestamp in sorted_time {
-                log::debug!("{}", match data_points.get(timestamp) {
-                    Some(data_point) => data_point,
-                    None => exit(-3)
-                })
-            }
-        }
-        Err(error) => log::error!("{}", error),
-    }
+    // Run the application
+    application.run()
 }
