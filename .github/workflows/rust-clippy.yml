@@ -22,6 +22,8 @@ jobs:
   rust-clippy-analyze:
     name: Run rust-clippy analyzing
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/gtk-rs/gtk4-rs/gtk4:latest
     permissions:
       contents: read
       security-events: write
