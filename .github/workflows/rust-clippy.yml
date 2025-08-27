@@ -29,16 +29,37 @@ jobs:
       security-events: write
       actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4.1.7
+      # 1. Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it.
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # 2. Install GTK4 and its dependencies.
+      # This is the most critical step for a gtk4-rs application.
+      # It uses apt-get to install the C libraries needed to compile GTK.
+      - name: Install GTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev build-essential pkg-config
+
+      # 3. Install the Rust toolchain with rustup.
+      # This action also adds `clippy` and `rustfmt` components.
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f #@v1.0.6
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          components: clippy
-          override: true
+          components: clippy, rustfmt
+
+      # 4. Cache Cargo dependencies to speed up future builds.
+      # It caches the cargo registry, git dependencies, and the target/debug directory.
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install required cargo
         run: cargo install clippy-sarif sarif-fmt
