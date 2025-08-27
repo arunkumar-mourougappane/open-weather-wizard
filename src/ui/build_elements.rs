@@ -1,8 +1,8 @@
 use gtk::Button;
+use gtk::Label;
 use gtk::prelude::*; // Import necessary traits for GTK widgets
 use gtk4::gio::{Menu, MenuItem};
 use gtk4::{self as gtk, Spinner}; // For glib::ExitCode
-use gtk::Label;
 
 use crate::weather_api::openweather_api;
 
@@ -45,7 +45,6 @@ pub fn build_main_menu() -> Menu {
 
 pub fn build_button(label: String) -> Button {
     // Create a button with a label
-    
 
     Button::builder()
         .label(label.as_str())
@@ -57,8 +56,6 @@ pub fn build_button(label: String) -> Button {
 }
 
 pub fn build_entry(label: String) -> gtk::Entry {
-    
-
     gtk::Entry::builder()
         .placeholder_text(label.as_str())
         .margin_top(12)
@@ -84,4 +81,3 @@ pub fn update_ui_with_weather(
         humidity_label.set_text(&format!("Humidity: {}%", weather_data.main.humidity));
     }
 }
-

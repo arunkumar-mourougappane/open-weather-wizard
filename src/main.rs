@@ -24,16 +24,17 @@
 //! ## Usage
 //!
 //! Run the application to launch the Weather Wizard UI window.
-use log::{self, LevelFilter};
 use env_logger::{self, Builder};
 use gtk4::PopoverMenuBar;
 use gtk4::gio::MenuModel;
 use gtk4::{Application, ApplicationWindow};
-use gtk4::{Label, prelude::*}; // Import necessary traits for GTK widgets
+use gtk4::{Label, prelude::*};
+use log::{self, LevelFilter}; // Import necessary traits for GTK widgets
 mod ui;
 mod weather_api;
 use ui::build_elements::{
-    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_main_menu, build_spinner, build_entry
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_entry, build_main_menu,
+    build_spinner,
 };
 
 use crate::ui::build_elements::update_ui_with_weather;
@@ -105,7 +106,7 @@ fn build_main_ui() -> Application {
         let spinner: gtk4::Spinner = build_spinner(40);
         vbox.append(&spinner);
 
-                // Arrange widgets vertically in a Box container
+        // Arrange widgets vertically in a Box container
         let main_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .spacing(6)
@@ -184,8 +185,6 @@ fn build_main_ui() -> Application {
             });
         });
 
-
-
         vbox.append(&main_box);
         window.set_child(Some(&vbox));
         // Present the window to the user
@@ -194,7 +193,7 @@ fn build_main_ui() -> Application {
     application
 }
 
-#[tokio::main] 
+#[tokio::main]
 async fn main() -> glib::ExitCode {
     Builder::new()
         // Set the default log level to `info` if RUST_LOG is not set
@@ -210,4 +209,3 @@ async fn main() -> glib::ExitCode {
     // Run the application
     application.run()
 }
-

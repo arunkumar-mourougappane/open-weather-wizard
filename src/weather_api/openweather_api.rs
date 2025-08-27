@@ -183,11 +183,11 @@ pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
         GeocodeError::RequestFailed(err) => {
             println!("Error fetching coordinates: {:?}", err);
             ApiError::RequestFailed(err)
-        },
+        }
         GeocodeError::LocationNotFound => {
             println!("Location not found");
             ApiError::CityNotFound
-        },
+        }
     })?;
 
     // Construct the API URL. We use metric units for Celsius.
@@ -202,13 +202,10 @@ pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
     // Check if the request was successful (e.g., status 200 OK)
     if response.status().is_success() {
         // Try to parse the JSON response into our ApiResponse struct
-        response
-            .json::<ApiResponse>()
-            .await
-            .map_err(|_| {
-                log::error!("Failed to parse API response");
-                ApiError::InvalidResponse
-            })
+        response.json::<ApiResponse>().await.map_err(|_| {
+            log::error!("Failed to parse API response");
+            ApiError::InvalidResponse
+        })
     } else {
         // If the city is not found, the API returns a 404 status
         log::error!("City not found: {}", location.name);
@@ -218,7 +215,10 @@ pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
 
 /// Returns an emoji symbol based on the main weather condition string.
 pub fn get_weather_symbol(weather_condition: &str) -> &str {
-    log::info!("Mapping weather condition '{}' to symbol", weather_condition);
+    log::info!(
+        "Mapping weather condition '{}' to symbol",
+        weather_condition
+    );
     match weather_condition {
         "Clear" => "☀️",
         "Clouds" => "☁️",
