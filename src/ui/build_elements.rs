@@ -84,7 +84,7 @@ fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
         openweather_api::WeatherSymbol::Drizzle => "animated/rainy-2.svg",
         openweather_api::WeatherSymbol::Thunderstorm => "animated/thunder.svg",
         openweather_api::WeatherSymbol::Snow => "animated/snowy-3.svg",
-        openweather_api::WeatherSymbol::Mist => "static/mist.png",
+        openweather_api::WeatherSymbol::Mist => "static/mist.svg",
         _ => "animated/weather.svg",
     }
 }
