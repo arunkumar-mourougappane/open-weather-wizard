@@ -1,13 +1,24 @@
+use glib::Bytes;
 use gtk::Button;
 use gtk::Label;
-use gtk::prelude::*; // Import necessary traits for GTK widgets
-use gtk4::gio::{Menu, MenuItem};
-use gtk4::{self as gtk, Spinner}; // For glib::ExitCode
+use gtk::prelude::*;
+use gtk::gdk_pixbuf::Pixbuf;
+use gtk::gio;
+use gtk::gio::MemoryInputStream;
+// Import necessary traits for GTK widgets
+use gtk::gio::{Menu, MenuItem};
+use gtk::{Spinner, Image}; // For glib::ExitCode and Image widget
 
 use crate::weather_api::openweather_api;
 
 pub const DEFAULT_WINDOW_WIDTH: i32 = 720;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
+
+use rust_embed::RustEmbed;
+
+#[derive(RustEmbed)]
+#[folder = "assets/"]
+struct WeatherIconsAsset;
 
 pub fn build_spinner(diameter: i32) -> gtk::Spinner {
     let spinner = Spinner::builder()
@@ -65,17 +76,42 @@ pub fn build_entry(label: String) -> gtk::Entry {
         .build()
 }
 
+fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
+    match weather {
+        openweather_api::WeatherSymbol::Clear => "static/day.svg",
+        openweather_api::WeatherSymbol::Clouds => "animated/cloudy-day-1.svg",
+        openweather_api::WeatherSymbol::Rain => "animated/rainy-6.svg",
+        openweather_api::WeatherSymbol::Drizzle => "animated/rainy-2.svg",
+        openweather_api::WeatherSymbol::Thunderstorm => "animated/thunder.svg",
+        openweather_api::WeatherSymbol::Snow => "animated/snowy-3.svg",
+        openweather_api::WeatherSymbol::Mist => "static/mist.png",
+        _ => "animated/weather.svg",
+    }
+}
+
 /// Updates the UI labels with the fetched weather data.
 pub fn update_ui_with_weather(
     weather_data: &openweather_api::ApiResponse,
-    symbol_label: &Label,
+    symbol_image: &Image,
     temp_label: &Label,
     desc_label: &Label,
     humidity_label: &Label,
 ) {
     if let Some(weather) = weather_data.weather.first() {
+        // Get the data like before
+        let embedded_file = WeatherIconsAsset::get(get_weather_symbol(openweather_api::get_weather_symbol(
+            &weather.main,
+        )))
+        .unwrap();
+        let svg_data: std::borrow::Cow<'static, [u8]> = embedded_file.data;
+        let bytes = Bytes::from_owned(svg_data.clone());
+
+        // Load bytes into a stream, then into a Pixbuf
+        let stream: MemoryInputStream = MemoryInputStream::from_bytes(&bytes);
+        let pixbuf = Pixbuf::from_stream_at_scale(&stream, 256, 256, true, None::<&gio::Cancellable>)
+            .expect("Failed to create Pixbuf from SVG stream.");
         // Update labels with formatted data
-        symbol_label.set_text(openweather_api::get_weather_symbol(&weather.main));
+        symbol_image.set_from_pixbuf(Some(&pixbuf));
         temp_label.set_text(&format!("{:.1}°C", weather_data.main.temp));
         desc_label.set_text(&weather.description);
         humidity_label.set_text(&format!("Humidity: {}%", weather_data.main.humidity));
