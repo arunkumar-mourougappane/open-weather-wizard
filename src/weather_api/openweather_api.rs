@@ -233,7 +233,7 @@ pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
     }
 }
 
-/// Returns an emoji symbol based on the main weather condition string.
+/// Returns a `WeatherSymbol` enum variant based on the main weather condition string.
 pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
     log::info!(
         "Mapping weather condition '{}' to symbol",
