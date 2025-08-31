@@ -103,6 +103,26 @@ pub enum ApiError {
     InvalidResponse,
 }
 
+#[derive(Debug)]
+pub enum WeatherSymbol {
+    Clear,
+    Clouds,
+    Rain,
+    Drizzle,
+    Thunderstorm,
+    Snow,
+    Mist,
+    // Smoke,
+    // Haze,
+    // Dust,
+    // Fog,
+    // Sand,
+    // Ash,
+    // Squall,
+    // Tornado,
+    Default,
+}
+
 // This struct matches the structure of the JSON objects inside the array
 // returned by the OpenWeatherMap Geocoding API.
 #[derive(Deserialize, Debug)]
@@ -214,19 +234,19 @@ pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
 }
 
 /// Returns an emoji symbol based on the main weather condition string.
-pub fn get_weather_symbol(weather_condition: &str) -> &str {
+pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
     log::info!(
         "Mapping weather condition '{}' to symbol",
         weather_condition
     );
     match weather_condition {
-        "Clear" => "☀️",
-        "Clouds" => "☁️",
-        "Rain" => "🌧️",
-        "Drizzle" => "💧",
-        "Thunderstorm" => "⚡️",
-        "Snow" => "❄️",
-        "Mist" | "Smoke" | "Haze" | "Dust" | "Fog" | "Sand" | "Ash" | "Squall" | "Tornado" => "🌫️",
-        _ => "🌍", // Default case
+        "Clear" => WeatherSymbol::Clear,
+        "Clouds" => WeatherSymbol::Clouds,
+        "Rain" => WeatherSymbol::Rain,
+        "Drizzle" => WeatherSymbol::Drizzle,
+        "Thunderstorm" => WeatherSymbol::Thunderstorm,
+        "Snow" => WeatherSymbol::Snow,
+        "Mist" | "Smoke" | "Haze" | "Dust" | "Fog" | "Sand" | "Ash" | "Squall" | "Tornado" => WeatherSymbol::Mist,
+        _ => WeatherSymbol::Default,
     }
 }

@@ -26,7 +26,7 @@ jobs:
       - name: Install GTK dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev build-essential pkg-config
+          sudo apt-get install -y libgtk-4-dev build-essential pkg-config librsvg2-dev
 
       # 3. Install the Rust toolchain with rustup.
       # This action also adds `clippy` and `rustfmt` components.
