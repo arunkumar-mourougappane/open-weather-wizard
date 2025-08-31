@@ -246,7 +246,9 @@ pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
         "Drizzle" => WeatherSymbol::Drizzle,
         "Thunderstorm" => WeatherSymbol::Thunderstorm,
         "Snow" => WeatherSymbol::Snow,
-        "Mist" | "Smoke" | "Haze" | "Dust" | "Fog" | "Sand" | "Ash" | "Squall" | "Tornado" => WeatherSymbol::Mist,
+        "Mist" | "Smoke" | "Haze" | "Dust" | "Fog" | "Sand" | "Ash" | "Squall" | "Tornado" => {
+            WeatherSymbol::Mist
+        }
         _ => WeatherSymbol::Default,
     }
 }
