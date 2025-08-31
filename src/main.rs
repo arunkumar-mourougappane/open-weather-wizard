@@ -28,7 +28,7 @@ use env_logger::{self, Builder};
 use gtk::PopoverMenuBar;
 use gtk::gio::MenuModel;
 use gtk::{Application, ApplicationWindow};
-use gtk::{Label, Image, prelude::*};
+use gtk::{Image, Label, prelude::*};
 use log::{self, LevelFilter}; // Import necessary traits for GTK widgets
 mod ui;
 mod weather_api;

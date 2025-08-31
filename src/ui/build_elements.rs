@@ -1,13 +1,13 @@
 use glib::Bytes;
 use gtk::Button;
 use gtk::Label;
-use gtk::prelude::*;
 use gtk::gdk_pixbuf::Pixbuf;
 use gtk::gio;
 use gtk::gio::MemoryInputStream;
+use gtk::prelude::*;
 // Import necessary traits for GTK widgets
 use gtk::gio::{Menu, MenuItem};
-use gtk::{Spinner, Image}; // For glib::ExitCode and Image widget
+use gtk::{Image, Spinner}; // For glib::ExitCode and Image widget
 
 use crate::weather_api::openweather_api;
 
@@ -99,17 +99,18 @@ pub fn update_ui_with_weather(
 ) {
     if let Some(weather) = weather_data.weather.first() {
         // Get the data like before
-        let embedded_file = WeatherIconsAsset::get(get_weather_symbol(openweather_api::get_weather_symbol(
-            &weather.main,
-        )))
+        let embedded_file = WeatherIconsAsset::get(get_weather_symbol(
+            openweather_api::get_weather_symbol(&weather.main),
+        ))
         .unwrap();
         let svg_data: std::borrow::Cow<'static, [u8]> = embedded_file.data;
         let bytes = Bytes::from_owned(svg_data.clone());
 
         // Load bytes into a stream, then into a Pixbuf
         let stream: MemoryInputStream = MemoryInputStream::from_bytes(&bytes);
-        let pixbuf = Pixbuf::from_stream_at_scale(&stream, 256, 256, true, None::<&gio::Cancellable>)
-            .expect("Failed to create Pixbuf from SVG stream.");
+        let pixbuf =
+            Pixbuf::from_stream_at_scale(&stream, 256, 256, true, None::<&gio::Cancellable>)
+                .expect("Failed to create Pixbuf from SVG stream.");
         // Update labels with formatted data
         symbol_image.set_from_pixbuf(Some(&pixbuf));
         temp_label.set_text(&format!("{:.1}°C", weather_data.main.temp));
