@@ -78,13 +78,13 @@ pub fn build_entry(label: String) -> gtk::Entry {
 
 fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
     match weather {
-        openweather_api::WeatherSymbol::Clear => "static/day.svg",
+        openweather_api::WeatherSymbol::Clear => "animated/day.svg",
         openweather_api::WeatherSymbol::Clouds => "animated/cloudy-day-1.svg",
         openweather_api::WeatherSymbol::Rain => "animated/rainy-6.svg",
         openweather_api::WeatherSymbol::Drizzle => "animated/rainy-2.svg",
         openweather_api::WeatherSymbol::Thunderstorm => "animated/thunder.svg",
         openweather_api::WeatherSymbol::Snow => "animated/snowy-3.svg",
-        openweather_api::WeatherSymbol::Mist => "static/mist.svg",
+        openweather_api::WeatherSymbol::Mist => "animated/fog.svg",
         _ => "animated/weather.svg",
     }
 }
@@ -96,25 +96,26 @@ pub fn update_ui_with_weather(
     temp_label: &Label,
     desc_label: &Label,
     humidity_label: &Label,
-) {
+) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(weather) = weather_data.weather.first() {
         // Get the data like before
         let embedded_file = WeatherIconsAsset::get(get_weather_symbol(
             openweather_api::get_weather_symbol(&weather.main),
         ))
-        .unwrap();
-        let svg_data: std::borrow::Cow<'static, [u8]> = embedded_file.data;
-        let bytes = Bytes::from_owned(svg_data.clone());
+        .ok_or("Asset not found")?;
+        // Get the SVG data
+        let svg_data = embedded_file.data.as_ref();
+        let bytes = Bytes::from(svg_data);
 
         // Load bytes into a stream, then into a Pixbuf
         let stream: MemoryInputStream = MemoryInputStream::from_bytes(&bytes);
         let pixbuf =
-            Pixbuf::from_stream_at_scale(&stream, 256, 256, true, None::<&gio::Cancellable>)
-                .expect("Failed to create Pixbuf from SVG stream.");
+            Pixbuf::from_stream_at_scale(&stream, 256, 256, true, None::<&gio::Cancellable>)?;
         // Update labels with formatted data
         symbol_image.set_from_pixbuf(Some(&pixbuf));
         temp_label.set_text(&format!("{:.1}°C", weather_data.main.temp));
         desc_label.set_text(&weather.description);
         humidity_label.set_text(&format!("Humidity: {}%", weather_data.main.humidity));
     }
+    Ok(())
 }
