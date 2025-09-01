@@ -170,13 +170,19 @@ fn build_main_ui() -> Application {
                 spinner.set_visible(false); // Hide the spinner
                 match result {
                     Ok(weather_data) => {
-                        update_ui_with_weather(
+                        match update_ui_with_weather(
                             &weather_data,
                             &weather_symbol_image_clone,
                             &temp_label_clone,
                             &description_label_clone,
                             &humidity_label_clone,
-                        );
+                        ) {
+                            Ok(()) => {}
+                            Err(e) => {
+                                description_label_clone.set_text(&format!("Error: {}", e));
+                                weather_symbol_image_clone.set_from_pixbuf(None);
+                            }
+                        }
                     }
                     Err(e) => {
                         let error_message = match e {
