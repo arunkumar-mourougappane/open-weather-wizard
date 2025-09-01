@@ -25,10 +25,10 @@
 //!
 //! Run the application to launch the Weather Wizard UI window.
 use env_logger::{self, Builder};
-use gtk4::PopoverMenuBar;
-use gtk4::gio::MenuModel;
-use gtk4::{Application, ApplicationWindow};
-use gtk4::{Label, prelude::*};
+use gtk::PopoverMenuBar;
+use gtk::gio::MenuModel;
+use gtk::{Application, ApplicationWindow};
+use gtk::{Image, Label, prelude::*};
 use log::{self, LevelFilter}; // Import necessary traits for GTK widgets
 mod ui;
 mod weather_api;
@@ -65,12 +65,12 @@ fn build_main_ui() -> Application {
         let menubar = PopoverMenuBar::from_model(Some(&menu_model));
 
         // Add menubar to the window (e.g., within a Box)
-        let vbox = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Vertical)
+        let vbox = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
             .build();
 
-        let location_box = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Horizontal)
+        let location_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
             .build();
 
         vbox.append(&menubar);
@@ -78,21 +78,26 @@ fn build_main_ui() -> Application {
         // Add other widgets to vbox as needed
         // Create and add entry fields
         let city_entry = build_entry("City".to_string());
+        city_entry.set_text("Peoria");
         location_box.append(&city_entry);
         // State and Country entries
         let state_entry = build_entry("State".to_string());
+        state_entry.set_text("IL");
         location_box.append(&state_entry);
         let country_entry = build_entry("Country".to_string());
+        country_entry.set_text("US");
         location_box.append(&country_entry);
 
+        // Weather symbol image
+        let weather_symbol_image = Image::from_pixbuf(None);
+        weather_symbol_image.set_pixel_size(128);
         // Labels for displaying weather data
-        let weather_symbol_label = Label::new(Some("❓"));
         let temp_label = Label::new(Some("--°C"));
         let description_label = Label::new(Some("Enter a city to begin"));
         let humidity_label = Label::new(Some("Humidity: --%"));
 
         // Add CSS classes for styling
-        weather_symbol_label.add_css_class("weather-symbol");
+        // weather_symbol_image.add_css_class("weather-symbol");
         description_label.add_css_class("weather-description");
         temp_label.add_css_class("weather-temp");
         humidity_label.add_css_class("weather-humidity");
@@ -103,12 +108,13 @@ fn build_main_ui() -> Application {
         vbox.append(&weather_button);
 
         // Create and add a spinner
-        let spinner: gtk4::Spinner = build_spinner(40);
+        let spinner: gtk::Spinner = build_spinner(40);
+        spinner.set_visible(false);
         vbox.append(&spinner);
 
         // Arrange widgets vertically in a Box container
-        let main_box = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Vertical)
+        let main_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
             .spacing(6)
             .margin_top(12)
             .margin_bottom(12)
@@ -116,7 +122,7 @@ fn build_main_ui() -> Application {
             .margin_end(12)
             .build();
 
-        main_box.append(&weather_symbol_label);
+        main_box.append(&weather_symbol_image);
         main_box.append(&temp_label);
         main_box.append(&description_label);
         main_box.append(&humidity_label);
@@ -130,7 +136,7 @@ fn build_main_ui() -> Application {
             let temp_label_clone = temp_label.clone();
             let description_label_clone = description_label.clone();
             let humidity_label_clone = humidity_label.clone();
-            let weather_symbol_label_clone = weather_symbol_label.clone();
+            let weather_symbol_image_clone = weather_symbol_image.clone();
             let spinner = spinner.clone();
             // Get the city name from the entry field
             let city = city_entry_clone.text().to_string();
@@ -164,13 +170,19 @@ fn build_main_ui() -> Application {
                 spinner.set_visible(false); // Hide the spinner
                 match result {
                     Ok(weather_data) => {
-                        update_ui_with_weather(
+                        match update_ui_with_weather(
                             &weather_data,
-                            &weather_symbol_label_clone,
+                            &weather_symbol_image_clone,
                             &temp_label_clone,
                             &description_label_clone,
                             &humidity_label_clone,
-                        );
+                        ) {
+                            Ok(()) => {}
+                            Err(e) => {
+                                description_label_clone.set_text(&format!("Error: {}", e));
+                                weather_symbol_image_clone.set_from_pixbuf(None);
+                            }
+                        }
                     }
                     Err(e) => {
                         let error_message = match e {
@@ -179,7 +191,7 @@ fn build_main_ui() -> Application {
                             ApiError::InvalidResponse => "Could not parse server response.",
                         };
                         description_label_clone.set_text(error_message);
-                        weather_symbol_label_clone.set_text("⚠️");
+                        weather_symbol_image_clone.set_from_pixbuf(None);
                     }
                 }
             });
