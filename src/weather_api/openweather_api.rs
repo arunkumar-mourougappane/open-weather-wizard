@@ -23,14 +23,20 @@
 //!
 //! # Example
 //!
-//! ```rust
-//! use weather_api::openweather::get_weather;
+//! ```rust,no_run
+//! use open_wearther_wizard::weather_api::openweather_api::get_weather;
+//! use open_wearther_wizard::weather_api::openweather_api::Location;
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let city = "London";
-//!     let api_key = "your_api_key";
-//!     match get_weather(city, api_key).await {
+//!     let location = Location {
+//!         name: "London".to_string(),
+//!         lat: 0.0,
+//!         lon: 0.0,
+//!         country: Some("UK".to_string()),
+//!         state: None,
+//!     };
+//!     match get_weather(&location).await {
 //!         Ok(response) => println!("{:?}", response),
 //!         Err(e) => eprintln!("Error: {:?}", e),
 //!     }
