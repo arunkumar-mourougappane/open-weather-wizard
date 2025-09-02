@@ -30,6 +30,7 @@ use gtk::gio::MenuModel;
 use gtk::{Application, ApplicationWindow};
 use gtk::{Image, Label, prelude::*};
 use log::{self, LevelFilter}; // Import necessary traits for GTK widgets
+mod config;
 mod ui;
 mod weather_api;
 use ui::build_elements::{
@@ -39,21 +40,37 @@ use ui::build_elements::{
 
 use crate::ui::build_elements::update_ui_with_weather;
 use crate::weather_api::openweather_api::{self, ApiError, Location}; // For glib::ExitCode
+use crate::config::{Config, WeatherProvider};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn build_main_ui() -> Application {
     // Create a new GTK application
     let application = Application::builder()
         .application_id("com.example.FirstGtkApp") // Unique application ID
         .build();
+    
     application.connect_activate(|app| {
+        // Load configuration
+        let config = match Config::load() {
+            Ok(config) => config,
+            Err(e) => {
+                log::error!("Failed to load configuration: {}", e);
+                Config::default()
+            }
+        };
+        let config = Rc::new(RefCell::new(config));
+        
         // Create a new application window
         let window = ApplicationWindow::builder()
             .application(app) // Associate the window with the application
-            .title("Weahter Wizard") // Set the window title
+            .title("Weather Wizard") // Set the window title
             .default_width(DEFAULT_WINDOW_WIDTH)
             .default_height(DEFAULT_WINDOW_HEIGHT)
             .build();
-        window.present();
+
+        // Set up menu actions
+        setup_menu_actions(app, &window, config.clone());
 
         // Create root menu and add submenus
         let root_menu = build_main_menu();
@@ -75,17 +92,20 @@ fn build_main_ui() -> Application {
 
         vbox.append(&menubar);
         vbox.append(&location_box);
-        // Add other widgets to vbox as needed
-        // Create and add entry fields
+        
+        // Create and add entry fields with default values from config
+        let default_location = &config.borrow().default_location;
         let city_entry = build_entry("City".to_string());
-        city_entry.set_text("Peoria");
+        city_entry.set_text(&default_location.city);
         location_box.append(&city_entry);
+        
         // State and Country entries
         let state_entry = build_entry("State".to_string());
-        state_entry.set_text("IL");
+        state_entry.set_text(&default_location.state);
         location_box.append(&state_entry);
+        
         let country_entry = build_entry("Country".to_string());
-        country_entry.set_text("US");
+        country_entry.set_text(&default_location.country);
         location_box.append(&country_entry);
 
         // Weather symbol image
@@ -128,6 +148,8 @@ fn build_main_ui() -> Application {
         main_box.append(&humidity_label);
         main_box.append(&city_entry);
 
+        // Clone config for the button handler
+        let config_for_button = config.clone();
         weather_button.connect_clicked(move |_| {
             // Clone the widgets that we need to modify inside the button's click handler
             let city_entry_clone = city_entry.clone();
@@ -138,6 +160,8 @@ fn build_main_ui() -> Application {
             let humidity_label_clone = humidity_label.clone();
             let weather_symbol_image_clone = weather_symbol_image.clone();
             let spinner = spinner.clone();
+            let config = config_for_button.clone();
+            
             // Get the city name from the entry field
             let city = city_entry_clone.text().to_string();
             if city.is_empty() {
@@ -157,6 +181,7 @@ fn build_main_ui() -> Application {
                 spinner.start(); // Start the spinner animation
                 spinner.set_visible(true); // Make the spinner visible
                 description_label_clone.set_text("Fetching weather...");
+                
                 let location = Location {
                     state: Some(state.clone()),
                     country: Some(country.clone()),
@@ -164,8 +189,20 @@ fn build_main_ui() -> Application {
                     lat: 0.0,
                     lon: 0.0,
                 };
-                // Call our function from the `api` module
-                let result = openweather_api::get_weather(&location).await;
+                
+                // Get the weather data based on selected API
+                let result = match config.borrow().weather_provider {
+                    WeatherProvider::OpenWeather => {
+                        openweather_api::get_weather(&location).await
+                    },
+                    WeatherProvider::GoogleWeather => {
+                        crate::weather_api::google_weather_api::get_weather(
+                            &location, 
+                            &config.borrow().google_weather_api_key
+                        ).await
+                    },
+                };
+                
                 spinner.stop(); // Stop the spinner animation
                 spinner.set_visible(false); // Hide the spinner
                 match result {
@@ -203,6 +240,43 @@ fn build_main_ui() -> Application {
         window.present();
     });
     application
+}
+
+fn setup_menu_actions(app: &Application, window: &ApplicationWindow, config: Rc<RefCell<Config>>) {
+    // Preferences action
+    let preferences_action = gtk::gio::SimpleAction::new("preferences", None);
+    let window_weak = window.downgrade();
+    let config_clone = config.clone();
+    preferences_action.connect_activate(move |_, _| {
+        if let Some(window) = window_weak.upgrade() {
+            crate::ui::preferences_window::show_preferences_window(&window, config_clone.clone());
+        }
+    });
+    app.add_action(&preferences_action);
+
+    // Exit action
+    let exit_action = gtk::gio::SimpleAction::new("exit", None);
+    let app_weak = app.downgrade();
+    exit_action.connect_activate(move |_, _| {
+        if let Some(app) = app_weak.upgrade() {
+            app.quit();
+        }
+    });
+    app.add_action(&exit_action);
+
+    // About action (placeholder)
+    let about_action = gtk::gio::SimpleAction::new("about", None);
+    about_action.connect_activate(move |_, _| {
+        log::info!("About menu clicked - not implemented yet");
+    });
+    app.add_action(&about_action);
+
+    // Help action (placeholder)
+    let help_action = gtk::gio::SimpleAction::new("help", None);
+    help_action.connect_activate(move |_, _| {
+        log::info!("Help menu clicked - not implemented yet");
+    });
+    app.add_action(&help_action);
 }
 
 #[tokio::main]
