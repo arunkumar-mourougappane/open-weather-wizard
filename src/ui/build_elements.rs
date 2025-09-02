@@ -78,14 +78,22 @@ pub fn build_entry(label: String) -> gtk::Entry {
 
 fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
     match weather {
-        openweather_api::WeatherSymbol::Clear => "animated/day.svg",
-        openweather_api::WeatherSymbol::Clouds => "animated/cloudy-day-1.svg",
-        openweather_api::WeatherSymbol::Rain => "animated/rainy-6.svg",
-        openweather_api::WeatherSymbol::Drizzle => "animated/rainy-2.svg",
-        openweather_api::WeatherSymbol::Thunderstorm => "animated/thunder.svg",
-        openweather_api::WeatherSymbol::Snow => "animated/snowy-3.svg",
+        openweather_api::WeatherSymbol::Clear => "animated/clear-day.svg",
+        openweather_api::WeatherSymbol::Clouds => "animated/cloudy-2-day.svg",
+        openweather_api::WeatherSymbol::Rain => "animated/rainy-3.svg",
+        openweather_api::WeatherSymbol::Drizzle => "animated/rainy-1.svg",
+        openweather_api::WeatherSymbol::Thunderstorm => "animated/thunderstorms.svg",
+        openweather_api::WeatherSymbol::Snow => "animated/snowy-2.svg",
         openweather_api::WeatherSymbol::Mist => "animated/fog.svg",
-        _ => "animated/weather.svg",
+        openweather_api::WeatherSymbol::Smoke => "animated/fog.svg",
+        openweather_api::WeatherSymbol::Haze => "animated/haze.svg",
+        openweather_api::WeatherSymbol::Dust => "animated/dust.svg",
+        openweather_api::WeatherSymbol::Fog => "animated/fog.svg",
+        openweather_api::WeatherSymbol::Sand => "animated/dust.svg",
+        openweather_api::WeatherSymbol::Ash => "animated/dust.svg",
+        openweather_api::WeatherSymbol::Squall => "animated/wind.svg",
+        openweather_api::WeatherSymbol::Tornado => "animated/tornado.svg",
+        _ => "animated/cloudy.svg",
     }
 }
 
