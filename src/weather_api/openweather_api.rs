@@ -118,14 +118,14 @@ pub enum WeatherSymbol {
     Thunderstorm,
     Snow,
     Mist,
-    // Smoke,
-    // Haze,
-    // Dust,
-    // Fog,
-    // Sand,
-    // Ash,
-    // Squall,
-    // Tornado,
+    Smoke,
+    Haze,
+    Dust,
+    Fog,
+    Sand,
+    Ash,
+    Squall,
+    Tornado,
     Default,
 }
 
@@ -252,9 +252,15 @@ pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
         "Drizzle" => WeatherSymbol::Drizzle,
         "Thunderstorm" => WeatherSymbol::Thunderstorm,
         "Snow" => WeatherSymbol::Snow,
-        "Mist" | "Smoke" | "Haze" | "Dust" | "Fog" | "Sand" | "Ash" | "Squall" | "Tornado" => {
-            WeatherSymbol::Mist
-        }
+        "Mist" => WeatherSymbol::Mist,
+        "Smoke" => WeatherSymbol::Smoke,
+        "Haze" => WeatherSymbol::Haze,
+        "Dust" => WeatherSymbol::Dust,
+        "Fog" => WeatherSymbol::Fog,
+        "Sand" => WeatherSymbol::Sand,
+        "Ash" => WeatherSymbol::Ash,
+        "Squall" => WeatherSymbol::Squall,
+        "Tornado" => WeatherSymbol::Tornado,
         _ => WeatherSymbol::Default,
     }
 }
