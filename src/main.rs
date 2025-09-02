@@ -30,6 +30,7 @@ use gtk::gio::MenuModel;
 use gtk::{Application, ApplicationWindow};
 use gtk::{Image, Label, prelude::*};
 use log::{self, LevelFilter}; // Import necessary traits for GTK widgets
+mod secure_storage;
 mod ui;
 mod weather_api;
 use ui::build_elements::{
@@ -189,6 +190,8 @@ fn build_main_ui() -> Application {
                             ApiError::CityNotFound => "City not found.",
                             ApiError::RequestFailed(_) => "Network request failed.",
                             ApiError::InvalidResponse => "Could not parse server response.",
+                            ApiError::ApiKeyNotConfigured => "API key not configured. Please set up your OpenWeatherMap API key.",
+                            ApiError::SecureStorageError(_) => "Failed to access secure storage.",
                         };
                         description_label_clone.set_text(error_message);
                         weather_symbol_image_clone.set_from_pixbuf(None);

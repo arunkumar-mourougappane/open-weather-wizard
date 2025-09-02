@@ -39,7 +39,7 @@
 use reqwest;
 use serde::Deserialize;
 
-const API_KEY: &str = "a836db2d273c0b50a2376d6a31750064"; // Replace with your actual OpenWeatherMap API key
+use crate::secure_storage;
 
 /// Represents weather conditions returned by the OpenWeatherMap API.
 ///
@@ -93,6 +93,8 @@ pub struct ApiResponse {
 /// - `RequestFailed`: Indicates a network or HTTP error occurred during the API request.
 /// - `CityNotFound`: Returned when the requested city does not exist or cannot be found by the API.
 /// - `InvalidResponse`: Indicates that the response from the API could not be parsed or was malformed.
+/// - `ApiKeyNotConfigured`: Indicates that no API key has been configured in secure storage.
+/// - `SecureStorageError`: Indicates an error accessing the secure storage system.
 ///
 /// Use this type to handle errors gracefully and provide informative feedback to users.
 #[derive(Debug)]
@@ -101,6 +103,8 @@ pub enum ApiError {
     RequestFailed(reqwest::Error),
     CityNotFound,
     InvalidResponse,
+    ApiKeyNotConfigured,
+    SecureStorageError(secure_storage::SecureStorageError),
 }
 
 #[derive(Debug)]
@@ -142,17 +146,46 @@ pub enum GeocodeError {
     LocationNotFound,
 }
 
+impl From<secure_storage::SecureStorageError> for ApiError {
+    fn from(err: secure_storage::SecureStorageError) -> Self {
+        match err {
+            secure_storage::SecureStorageError::ApiKeyNotFound => ApiError::ApiKeyNotConfigured,
+            _ => ApiError::SecureStorageError(err),
+        }
+    }
+}
+
+/// Gets the API key from secure storage
+///
+/// # Returns
+/// A `Result` containing the API key on success, or an `ApiError` on failure.
+fn get_api_key() -> Result<String, ApiError> {
+    secure_storage::get_api_key().map_err(ApiError::from)
+}
+
 /// Fetches geographic coordinates for a given location.
 ///
 /// # Arguments
 /// * `city` - The name of the city.
 /// * `state` - The state or region (can be empty).
 /// * `country` - The country code (e.g., "US", "CA").
-/// * `api_key` - Your OpenWeatherMap API key.
 ///
 /// # Returns
 /// A `Result` containing the first found `Location` or a `GeocodeError`.
 async fn get_coords(city: &str, state: &str, country: &str) -> Result<Location, GeocodeError> {
+    // Get API key from secure storage
+    let api_key = get_api_key().map_err(|e| match e {
+        ApiError::ApiKeyNotConfigured => GeocodeError::RequestFailed(reqwest::Error::from(
+            std::io::Error::new(std::io::ErrorKind::NotFound, "API key not configured")
+        )),
+        ApiError::SecureStorageError(_) => GeocodeError::RequestFailed(reqwest::Error::from(
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Cannot access secure storage")
+        )),
+        _ => GeocodeError::RequestFailed(reqwest::Error::from(
+            std::io::Error::new(std::io::ErrorKind::Other, "API key error")
+        )),
+    })?;
+
     // Build the query string, joining non-empty parts with commas.
     let location_query = [city, state, country]
         .iter()
@@ -164,7 +197,7 @@ async fn get_coords(city: &str, state: &str, country: &str) -> Result<Location, 
     // Construct the full API URL. `limit=1` ensures we get only the most relevant result.
     let url = format!(
         "http://api.openweathermap.org/geo/1.0/direct?q={}&limit=1&appid={}",
-        location_query, API_KEY
+        location_query, api_key
     );
     // Make the request and parse the JSON response into a Vec of Locations.
     // The API returns an array, even if it's empty or has one item.
@@ -186,12 +219,14 @@ async fn get_coords(city: &str, state: &str, country: &str) -> Result<Location, 
 /// Asynchronously fetches weather data for a given city.
 ///
 /// # Arguments
-/// * `city` - The name of the city to fetch weather for.
-/// * `api_key` - Your personal OpenWeatherMap API key.
+/// * `location` - The location to fetch weather for.
 ///
 /// # Returns
 /// A `Result` containing the `ApiResponse` on success, or an `ApiError` on failure.
 pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
+    // Get API key from secure storage
+    let api_key = get_api_key()?;
+
     // Get coordinates for the location
     let weather_location = get_coords(
         &location.name,
@@ -213,7 +248,7 @@ pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
     // Construct the API URL. We use metric units for Celsius.
     let url = format!(
         "https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}&units=metric",
-        weather_location.lat, weather_location.lon, API_KEY
+        weather_location.lat, weather_location.lon, api_key
     );
 
     // Make the asynchronous GET request
