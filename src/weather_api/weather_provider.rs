@@ -14,9 +14,11 @@ pub trait WeatherProvider {
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError>;
 
     /// Get the name of this provider
+    #[allow(dead_code)]
     fn name(&self) -> &'static str;
 
     /// Check if this provider requires an API key
+    #[allow(dead_code)]
     fn requires_api_key(&self) -> bool;
 }
 

@@ -66,16 +66,6 @@ pub fn build_button(label: String) -> Button {
         .build()
 }
 
-pub fn build_entry(label: String) -> gtk::Entry {
-    gtk::Entry::builder()
-        .placeholder_text(label.as_str())
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .build()
-}
-
 fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
     match weather {
         openweather_api::WeatherSymbol::Clear => "animated/clear-day.svg",
