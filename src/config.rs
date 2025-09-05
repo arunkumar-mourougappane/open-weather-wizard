@@ -4,7 +4,7 @@
 //! including weather API settings, location preferences, and API tokens.
 //! API tokens are base64 encoded for basic obfuscation when stored.
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -96,30 +96,28 @@ impl ConfigManager {
         let config_dir = dirs::config_dir()
             .ok_or("Could not determine config directory")?
             .join("open-weather-wizard");
-        
+
         // Create config directory if it doesn't exist
         fs::create_dir_all(&config_dir)?;
-        
+
         let config_path = config_dir.join("config.json");
-        
+
         Ok(Self { config_path })
     }
 
     /// Load configuration from file, or return default if file doesn't exist
     pub fn load_config(&self) -> AppConfig {
         match fs::read_to_string(&self.config_path) {
-            Ok(contents) => {
-                match serde_json::from_str::<AppConfig>(&contents) {
-                    Ok(config) => {
-                        log::info!("Loaded configuration from {:?}", self.config_path);
-                        config
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to parse config file, using defaults: {}", e);
-                        AppConfig::default()
-                    }
+            Ok(contents) => match serde_json::from_str::<AppConfig>(&contents) {
+                Ok(config) => {
+                    log::info!("Loaded configuration from {:?}", self.config_path);
+                    config
                 }
-            }
+                Err(e) => {
+                    log::warn!("Failed to parse config file, using defaults: {}", e);
+                    AppConfig::default()
+                }
+            },
             Err(_) => {
                 log::info!("Config file not found, using defaults");
                 AppConfig::default()

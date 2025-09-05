@@ -6,11 +6,9 @@
 //! - Location settings (city, state, country)
 
 use gtk::prelude::*;
-use gtk::{
-    ApplicationWindow, Box, Button, ComboBoxText, Entry, Grid, HeaderBar, Label, Window,
-};
-use std::rc::Rc;
+use gtk::{ApplicationWindow, Box, Button, ComboBoxText, Entry, Grid, HeaderBar, Label, Window};
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::config::{AppConfig, ConfigManager, WeatherApiProvider};
 
@@ -42,10 +40,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
         .build();
 
     // Create grid for form layout
-    let grid = Grid::builder()
-        .row_spacing(12)
-        .column_spacing(12)
-        .build();
+    let grid = Grid::builder().row_spacing(12).column_spacing(12).build();
 
     // Weather Provider section
     let provider_label = Label::builder()
@@ -57,7 +52,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
     let provider_combo = ComboBoxText::new();
     provider_combo.append_text("OpenWeather");
     provider_combo.append_text("Google Weather");
-    
+
     // Set current provider
     {
         let current_config = config.borrow();
@@ -79,7 +74,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
         .placeholder_text("Enter your API token")
         .visibility(false) // Hide token for security
         .build();
-    
+
     // Set current token (if available)
     {
         let current_config = config.borrow();
@@ -105,9 +100,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
         .build();
     grid.attach(&city_label, 0, 3, 1, 1);
 
-    let city_entry = Entry::builder()
-        .placeholder_text("Enter city name")
-        .build();
+    let city_entry = Entry::builder().placeholder_text("Enter city name").build();
     {
         let current_config = config.borrow();
         city_entry.set_text(&current_config.location.city);
@@ -156,9 +149,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
         .margin_top(20)
         .build();
 
-    let cancel_button = Button::builder()
-        .label("Cancel")
-        .build();
+    let cancel_button = Button::builder().label("Cancel").build();
 
     let save_button = Button::builder()
         .label("Save")
@@ -181,7 +172,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
     save_button.connect_clicked(move |_| {
         // Save configuration
         let mut current_config = config.borrow_mut();
-        
+
         // Update provider
         if let Some(active) = provider_combo.active() {
             current_config.weather_provider = match active {
@@ -190,18 +181,18 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
                 _ => WeatherApiProvider::OpenWeather,
             };
         }
-        
+
         // Update API token
         let token_text = token_entry.text();
         if !token_text.is_empty() {
             current_config.set_api_token(&token_text);
         }
-        
+
         // Update location
         current_config.location.city = city_entry.text().to_string();
         current_config.location.state = state_entry.text().to_string();
         current_config.location.country = country_entry.text().to_string();
-        
+
         // Save to file
         if let Ok(config_manager) = ConfigManager::new() {
             if let Err(e) = config_manager.save_config(&current_config) {
@@ -211,7 +202,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
                 log::info!("Configuration saved successfully");
             }
         }
-        
+
         window_clone.close();
     });
 

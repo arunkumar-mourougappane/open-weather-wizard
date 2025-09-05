@@ -3,19 +3,19 @@
 //! This module provides a trait-based abstraction over different weather API providers,
 //! allowing the application to seamlessly switch between different weather services.
 
+use crate::config::{LocationConfig, WeatherApiProvider};
+use crate::weather_api::openweather_api::{ApiError, ApiResponse, Location};
 use async_trait::async_trait;
-use crate::config::{WeatherApiProvider, LocationConfig};
-use crate::weather_api::openweather_api::{ApiResponse, ApiError, Location};
 
 /// Trait for weather API providers
 #[async_trait]
 pub trait WeatherProvider {
     /// Fetch weather data for the given location
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError>;
-    
+
     /// Get the name of this provider
     fn name(&self) -> &'static str;
-    
+
     /// Check if this provider requires an API key
     fn requires_api_key(&self) -> bool;
 }
@@ -32,11 +32,13 @@ impl WeatherProviderFactory {
         match provider_type {
             WeatherApiProvider::OpenWeather => {
                 let token = api_token.ok_or("OpenWeather API requires an API token")?;
-                Ok(Box::new(super::openweather_api::OpenWeatherProvider::new(token)))
+                Ok(Box::new(super::openweather_api::OpenWeatherProvider::new(
+                    token,
+                )))
             }
-            WeatherApiProvider::GoogleWeather => {
-                Ok(Box::new(super::google_weather_api::GoogleWeatherProvider::new()))
-            }
+            WeatherApiProvider::GoogleWeather => Ok(Box::new(
+                super::google_weather_api::GoogleWeatherProvider::new(),
+            )),
         }
     }
 }

@@ -1,11 +1,11 @@
-use open_wearther_wizard::config::{AppConfig, WeatherApiProvider, LocationConfig};
+use open_wearther_wizard::config::{AppConfig, LocationConfig, WeatherApiProvider};
 use open_wearther_wizard::weather_api::weather_provider::WeatherProviderFactory;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("OpenWeather API Integration Test");
     println!("================================\n");
-    
+
     // Test OpenWeather API with the default key from the original app
     let config = AppConfig {
         weather_provider: WeatherApiProvider::OpenWeather,
@@ -16,19 +16,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             country: "UK".to_string(),
         },
     };
-    
+
     // Use the original API key for testing
     let api_key = "a836db2d273c0b50a2376d6a31750064";
-    
+
     println!("Testing OpenWeather API Provider...");
     println!("Location: London, UK");
     println!("Using provided API key: {}...", &api_key[..8]);
-    
+
     let provider = WeatherProviderFactory::create_provider(
         &WeatherApiProvider::OpenWeather,
-        Some(api_key.to_string())
+        Some(api_key.to_string()),
     )?;
-    
+
     match provider.get_weather(&config.location).await {
         Ok(weather_data) => {
             println!("\n✅ OpenWeather API Provider works!");
@@ -44,8 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   The provider factory and configuration system work correctly.");
         }
     }
-    
+
     println!("\n✅ OpenWeather API integration test completed!");
-    
+
     Ok(())
 }

@@ -42,11 +42,11 @@
 //!     }
 //! }
 //! ```
+use crate::config::LocationConfig;
+use crate::weather_api::weather_provider::{WeatherProvider, location_config_to_location};
 use async_trait::async_trait;
 use reqwest;
 use serde::Deserialize;
-use crate::config::LocationConfig;
-use crate::weather_api::weather_provider::{WeatherProvider, location_config_to_location};
 
 /// Represents weather conditions returned by the OpenWeatherMap API.
 ///
@@ -159,7 +159,12 @@ pub enum GeocodeError {
 ///
 /// # Returns
 /// A `Result` containing the first found `Location` or a `GeocodeError`.
-async fn get_coords(city: &str, state: &str, country: &str, api_key: &str) -> Result<Location, GeocodeError> {
+async fn get_coords(
+    city: &str,
+    state: &str,
+    country: &str,
+    api_key: &str,
+) -> Result<Location, GeocodeError> {
     // Build the query string, joining non-empty parts with commas.
     let location_query = [city, state, country]
         .iter()
