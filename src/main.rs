@@ -30,29 +30,57 @@ use gtk::gio::MenuModel;
 use gtk::{Application, ApplicationWindow};
 use gtk::{Image, Label, prelude::*};
 use log::{self, LevelFilter}; // Import necessary traits for GTK widgets
+mod config;
 mod ui;
 mod weather_api;
 use ui::build_elements::{
-    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_entry, build_main_menu,
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_main_menu,
     build_spinner,
 };
 
 use crate::ui::build_elements::update_ui_with_weather;
-use crate::weather_api::openweather_api::{self, ApiError, Location}; // For glib::ExitCode
+use crate::weather_api::openweather_api::ApiError;
+use crate::config::ConfigManager;
+use crate::weather_api::weather_provider::WeatherProviderFactory;
+use crate::ui::preferences::show_preferences_window;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 fn build_main_ui() -> Application {
+    // Load configuration
+    let config_manager = ConfigManager::new().expect("Failed to create config manager");
+    let config = Rc::new(RefCell::new(config_manager.load_config()));
+    
     // Create a new GTK application
     let application = Application::builder()
         .application_id("com.example.FirstGtkApp") // Unique application ID
         .build();
-    application.connect_activate(|app| {
+    let config_clone = config.clone();
+    application.connect_activate(move |app| {
         // Create a new application window
         let window = ApplicationWindow::builder()
             .application(app) // Associate the window with the application
-            .title("Weahter Wizard") // Set the window title
+            .title("Weather Wizard") // Set the window title
             .default_width(DEFAULT_WINDOW_WIDTH)
             .default_height(DEFAULT_WINDOW_HEIGHT)
             .build();
+
+        // Add menu actions
+        let preferences_action = gio::SimpleAction::new("preferences", None);
+        let config_clone_for_prefs = config_clone.clone();
+        let window_clone = window.clone();
+        preferences_action.connect_activate(move |_, _| {
+            show_preferences_window(&window_clone, config_clone_for_prefs.clone());
+        });
+        app.add_action(&preferences_action);
+
+        let quit_action = gio::SimpleAction::new("quit", None);
+        let app_clone = app.clone();
+        quit_action.connect_activate(move |_, _| {
+            app_clone.quit();
+        });
+        app.add_action(&quit_action);
+
         window.present();
 
         // Create root menu and add submenus
@@ -69,24 +97,7 @@ fn build_main_ui() -> Application {
             .orientation(gtk::Orientation::Vertical)
             .build();
 
-        let location_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .build();
-
         vbox.append(&menubar);
-        vbox.append(&location_box);
-        // Add other widgets to vbox as needed
-        // Create and add entry fields
-        let city_entry = build_entry("City".to_string());
-        city_entry.set_text("Peoria");
-        location_box.append(&city_entry);
-        // State and Country entries
-        let state_entry = build_entry("State".to_string());
-        state_entry.set_text("IL");
-        location_box.append(&state_entry);
-        let country_entry = build_entry("Country".to_string());
-        country_entry.set_text("US");
-        location_box.append(&country_entry);
 
         // Weather symbol image
         let weather_symbol_image = Image::from_pixbuf(None);
@@ -126,71 +137,67 @@ fn build_main_ui() -> Application {
         main_box.append(&temp_label);
         main_box.append(&description_label);
         main_box.append(&humidity_label);
-        main_box.append(&city_entry);
 
+        let config_for_button = config_clone.clone();
         weather_button.connect_clicked(move |_| {
             // Clone the widgets that we need to modify inside the button's click handler
-            let city_entry_clone = city_entry.clone();
-            let state_entry_clone = state_entry.clone();
-            let country_entry_clone = country_entry.clone();
             let temp_label_clone = temp_label.clone();
             let description_label_clone = description_label.clone();
             let humidity_label_clone = humidity_label.clone();
             let weather_symbol_image_clone = weather_symbol_image.clone();
             let spinner = spinner.clone();
-            // Get the city name from the entry field
-            let city = city_entry_clone.text().to_string();
-            if city.is_empty() {
-                return;
-            }
-            let state = state_entry_clone.text().to_string();
-            if state.is_empty() {
-                return;
-            }
-            let country = country_entry_clone.text().to_string();
-            if country.is_empty() {
-                return;
-            }
-
+            let config_clone = config_for_button.clone();
+            
             // Use glib::spawn_future_local to run our async API call without blocking the UI
             glib::spawn_future_local(async move {
                 spinner.start(); // Start the spinner animation
                 spinner.set_visible(true); // Make the spinner visible
                 description_label_clone.set_text("Fetching weather...");
-                let location = Location {
-                    state: Some(state.clone()),
-                    country: Some(country.clone()),
-                    name: city.clone(),
-                    lat: 0.0,
-                    lon: 0.0,
-                };
-                // Call our function from the `api` module
-                let result = openweather_api::get_weather(&location).await;
+                
+                let current_config = config_clone.borrow();
+                let location_config = current_config.location.clone();
+                let provider_type = current_config.weather_provider.clone();
+                let api_token = current_config.get_api_token().ok();
+                drop(current_config); // Release the borrow
+                
+                // Create weather provider
+                let provider_result = WeatherProviderFactory::create_provider(&provider_type, api_token);
+                
                 spinner.stop(); // Stop the spinner animation
                 spinner.set_visible(false); // Hide the spinner
-                match result {
-                    Ok(weather_data) => {
-                        match update_ui_with_weather(
-                            &weather_data,
-                            &weather_symbol_image_clone,
-                            &temp_label_clone,
-                            &description_label_clone,
-                            &humidity_label_clone,
-                        ) {
-                            Ok(()) => {}
+                
+                match provider_result {
+                    Ok(provider) => {
+                        // Call the weather API through the provider
+                        match provider.get_weather(&location_config).await {
+                            Ok(weather_data) => {
+                                match update_ui_with_weather(
+                                    &weather_data,
+                                    &weather_symbol_image_clone,
+                                    &temp_label_clone,
+                                    &description_label_clone,
+                                    &humidity_label_clone,
+                                ) {
+                                    Ok(()) => {}
+                                    Err(e) => {
+                                        description_label_clone.set_text(&format!("Error: {}", e));
+                                        weather_symbol_image_clone.set_from_pixbuf(None);
+                                    }
+                                }
+                            }
                             Err(e) => {
-                                description_label_clone.set_text(&format!("Error: {}", e));
+                                let error_message = match e {
+                                    ApiError::CityNotFound => "City not found.",
+                                    ApiError::RequestFailed(_) => "Network request failed.",
+                                    ApiError::InvalidResponse => "Could not parse server response.",
+                                };
+                                description_label_clone.set_text(error_message);
                                 weather_symbol_image_clone.set_from_pixbuf(None);
                             }
                         }
                     }
                     Err(e) => {
-                        let error_message = match e {
-                            ApiError::CityNotFound => "City not found.",
-                            ApiError::RequestFailed(_) => "Network request failed.",
-                            ApiError::InvalidResponse => "Could not parse server response.",
-                        };
-                        description_label_clone.set_text(error_message);
+                        description_label_clone.set_text(&format!("Configuration error: {}", e));
                         weather_symbol_image_clone.set_from_pixbuf(None);
                     }
                 }

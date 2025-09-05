@@ -24,22 +24,29 @@
 //! # Example
 //!
 //! ```rust
-//! use weather_api::openweather::get_weather;
+//! use open_wearther_wizard::weather_api::openweather_api::{get_weather, Location};
 //!
 //! #[tokio::main]
 //! async fn main() {
-//!     let city = "London";
+//!     let location = Location {
+//!         name: "London".to_string(),
+//!         lat: 0.0,
+//!         lon: 0.0,
+//!         country: Some("UK".to_string()),
+//!         state: None,
+//!     };
 //!     let api_key = "your_api_key";
-//!     match get_weather(city, api_key).await {
+//!     match get_weather(&location, api_key).await {
 //!         Ok(response) => println!("{:?}", response),
 //!         Err(e) => eprintln!("Error: {:?}", e),
 //!     }
 //! }
 //! ```
+use async_trait::async_trait;
 use reqwest;
 use serde::Deserialize;
-
-const API_KEY: &str = "a836db2d273c0b50a2376d6a31750064"; // Replace with your actual OpenWeatherMap API key
+use crate::config::LocationConfig;
+use crate::weather_api::weather_provider::{WeatherProvider, location_config_to_location};
 
 /// Represents weather conditions returned by the OpenWeatherMap API.
 ///
@@ -152,7 +159,7 @@ pub enum GeocodeError {
 ///
 /// # Returns
 /// A `Result` containing the first found `Location` or a `GeocodeError`.
-async fn get_coords(city: &str, state: &str, country: &str) -> Result<Location, GeocodeError> {
+async fn get_coords(city: &str, state: &str, country: &str, api_key: &str) -> Result<Location, GeocodeError> {
     // Build the query string, joining non-empty parts with commas.
     let location_query = [city, state, country]
         .iter()
@@ -164,7 +171,7 @@ async fn get_coords(city: &str, state: &str, country: &str) -> Result<Location, 
     // Construct the full API URL. `limit=1` ensures we get only the most relevant result.
     let url = format!(
         "http://api.openweathermap.org/geo/1.0/direct?q={}&limit=1&appid={}",
-        location_query, API_KEY
+        location_query, api_key
     );
     // Make the request and parse the JSON response into a Vec of Locations.
     // The API returns an array, even if it's empty or has one item.
@@ -183,20 +190,21 @@ async fn get_coords(city: &str, state: &str, country: &str) -> Result<Location, 
         .ok_or(GeocodeError::LocationNotFound)
 }
 
-/// Asynchronously fetches weather data for a given city.
+/// Asynchronously fetches weather data for a given location.
 ///
 /// # Arguments
-/// * `city` - The name of the city to fetch weather for.
+/// * `location` - The location to fetch weather for.
 /// * `api_key` - Your personal OpenWeatherMap API key.
 ///
 /// # Returns
 /// A `Result` containing the `ApiResponse` on success, or an `ApiError` on failure.
-pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
+pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiResponse, ApiError> {
     // Get coordinates for the location
     let weather_location = get_coords(
         &location.name,
         location.state.as_deref().unwrap_or(""),
         &location.country.clone().unwrap_or("".to_string()),
+        api_key,
     )
     .await
     .map_err(|e| match e {
@@ -213,7 +221,7 @@ pub async fn get_weather(location: &Location) -> Result<ApiResponse, ApiError> {
     // Construct the API URL. We use metric units for Celsius.
     let url = format!(
         "https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}&units=metric",
-        weather_location.lat, weather_location.lon, API_KEY
+        weather_location.lat, weather_location.lon, api_key
     );
 
     // Make the asynchronous GET request
@@ -256,5 +264,32 @@ pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
         "Squall" => WeatherSymbol::Squall,
         "Tornado" => WeatherSymbol::Tornado,
         _ => WeatherSymbol::Default,
+    }
+}
+
+/// OpenWeather API provider implementation
+pub struct OpenWeatherProvider {
+    api_key: String,
+}
+
+impl OpenWeatherProvider {
+    pub fn new(api_key: String) -> Self {
+        Self { api_key }
+    }
+}
+
+#[async_trait]
+impl WeatherProvider for OpenWeatherProvider {
+    async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError> {
+        let api_location = location_config_to_location(location);
+        get_weather(&api_location, &self.api_key).await
+    }
+
+    fn name(&self) -> &'static str {
+        "OpenWeather"
+    }
+
+    fn requires_api_key(&self) -> bool {
+        true
     }
 }
