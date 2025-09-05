@@ -12,6 +12,12 @@ use async_trait::async_trait;
 /// Google Weather API provider (mockup implementation)
 pub struct GoogleWeatherProvider;
 
+impl Default for GoogleWeatherProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GoogleWeatherProvider {
     pub fn new() -> Self {
         Self
