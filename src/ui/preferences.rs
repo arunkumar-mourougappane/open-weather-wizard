@@ -7,13 +7,12 @@
 
 use gtk::prelude::*;
 use gtk::{ApplicationWindow, Box, Button, ComboBoxText, Entry, Grid, HeaderBar, Label, Window};
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::config::{AppConfig, ConfigManager, WeatherApiProvider};
 
 /// Creates and shows the preferences window
-pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<AppConfig>>) {
+pub fn show_preferences_window(parent: &ApplicationWindow, config: Arc<Mutex<AppConfig>>) {
     let window = Window::builder()
         .title("Preferences")
         .default_width(500)
@@ -55,7 +54,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
 
     // Set current provider
     {
-        let current_config = config.borrow();
+        let current_config = config.lock().expect("Failed to lock config");
         match current_config.weather_provider {
             WeatherApiProvider::OpenWeather => provider_combo.set_active(Some(0)),
             WeatherApiProvider::GoogleWeather => provider_combo.set_active(Some(1)),
@@ -77,7 +76,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
 
     // Set current token (if available)
     {
-        let current_config = config.borrow();
+        let current_config = config.lock().expect("Failed to lock config");
         if let Ok(token) = current_config.get_api_token() {
             token_entry.set_text(&token);
         }
@@ -102,7 +101,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
 
     let city_entry = Entry::builder().placeholder_text("Enter city name").build();
     {
-        let current_config = config.borrow();
+        let current_config = config.lock().expect("Failed to lock config");
         city_entry.set_text(&current_config.location.city);
     }
     grid.attach(&city_entry, 1, 3, 1, 1);
@@ -118,7 +117,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
         .placeholder_text("Enter state or province")
         .build();
     {
-        let current_config = config.borrow();
+        let current_config = config.lock().expect("Failed to lock config");
         state_entry.set_text(&current_config.location.state);
     }
     grid.attach(&state_entry, 1, 4, 1, 1);
@@ -134,7 +133,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
         .placeholder_text("Enter country code (e.g., US, CA)")
         .build();
     {
-        let current_config = config.borrow();
+        let current_config = config.lock().expect("Failed to lock config");
         country_entry.set_text(&current_config.location.country);
     }
     grid.attach(&country_entry, 1, 5, 1, 1);
@@ -171,7 +170,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Rc<RefCell<Ap
     let window_clone = window.clone();
     save_button.connect_clicked(move |_| {
         // Save configuration
-        let mut current_config = config.borrow_mut();
+        let mut current_config = config.lock().expect("Failed to lock config");
 
         // Update provider
         if let Some(active) = provider_combo.active() {

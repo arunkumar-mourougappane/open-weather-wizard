@@ -42,13 +42,12 @@ use crate::ui::build_elements::update_ui_with_weather;
 use crate::ui::preferences::show_preferences_window;
 use crate::weather_api::openweather_api::ApiError;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 fn build_main_ui() -> Application {
     // Load configuration
     let config_manager = ConfigManager::new().expect("Failed to create config manager");
-    let config = Rc::new(RefCell::new(config_manager.load_config()));
+    let config = Arc::new(Mutex::new(config_manager.load_config()));
 
     // Create a new GTK application
     let application = Application::builder()
@@ -153,11 +152,11 @@ fn build_main_ui() -> Application {
                 spinner.set_visible(true); // Make the spinner visible
                 description_label_clone.set_text("Fetching weather...");
 
-                let current_config = config_clone.borrow();
+                let current_config = config_clone.lock().expect("Failed to lock config");
                 let location_config = current_config.location.clone();
                 let provider_type = current_config.weather_provider.clone();
                 let api_token = current_config.get_api_token().ok();
-                drop(current_config); // Release the borrow
+                drop(current_config); // Release the lock
 
                 // Create weather provider
                 let provider_result =
