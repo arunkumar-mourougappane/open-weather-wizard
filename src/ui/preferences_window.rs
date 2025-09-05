@@ -1,5 +1,5 @@
 //! Preferences window for configuring Weather Wizard settings
-//! 
+//!
 //! This module provides a GTK4 window for editing application configuration,
 //! including API selection, API keys, and default location settings.
 
@@ -49,13 +49,9 @@ pub fn show_preferences_window(parent: &ApplicationWindow, current_config: Rc<Re
         .halign(gtk::Align::End)
         .build();
 
-    let cancel_button = Button::builder()
-        .label("Cancel")
-        .build();
+    let cancel_button = Button::builder().label("Cancel").build();
 
-    let save_button = Button::builder()
-        .label("Save")
-        .build();
+    let save_button = Button::builder().label("Save").build();
 
     button_box.append(&cancel_button);
     button_box.append(&save_button);
@@ -139,35 +135,32 @@ fn create_api_keys_section(config: &Rc<RefCell<Config>>) -> Box {
         .halign(gtk::Align::Start)
         .build();
 
-    let grid = Grid::builder()
-        .row_spacing(6)
-        .column_spacing(12)
-        .build();
+    let grid = Grid::builder().row_spacing(6).column_spacing(12).build();
 
     // OpenWeather API Key
     let openweather_label = Label::builder()
         .label("OpenWeather API Key:")
         .halign(gtk::Align::Start)
         .build();
-    
+
     let openweather_entry = Entry::builder()
         .placeholder_text("Enter OpenWeather API key")
         .hexpand(true)
         .build();
-    
+
     openweather_entry.set_text(&config.borrow().openweather_api_key);
 
-    // Google Weather API Key  
+    // Google Weather API Key
     let google_label = Label::builder()
         .label("Google Weather API Key:")
         .halign(gtk::Align::Start)
         .build();
-    
+
     let google_entry = Entry::builder()
         .placeholder_text("Enter Google Weather API key")
         .hexpand(true)
         .build();
-    
+
     google_entry.set_text(&config.borrow().google_weather_api_key);
 
     // Connect entry changes to config
@@ -204,22 +197,19 @@ fn create_location_section(config: &Rc<RefCell<Config>>) -> Box {
         .halign(gtk::Align::Start)
         .build();
 
-    let grid = Grid::builder()
-        .row_spacing(6)
-        .column_spacing(12)
-        .build();
+    let grid = Grid::builder().row_spacing(6).column_spacing(12).build();
 
     // City
     let city_label = Label::builder()
         .label("City:")
         .halign(gtk::Align::Start)
         .build();
-    
+
     let city_entry = Entry::builder()
         .placeholder_text("Enter city name")
         .hexpand(true)
         .build();
-    
+
     city_entry.set_text(&config.borrow().default_location.city);
 
     // State
@@ -227,12 +217,12 @@ fn create_location_section(config: &Rc<RefCell<Config>>) -> Box {
         .label("State/Province:")
         .halign(gtk::Align::Start)
         .build();
-    
+
     let state_entry = Entry::builder()
         .placeholder_text("Enter state or province")
         .hexpand(true)
         .build();
-    
+
     state_entry.set_text(&config.borrow().default_location.state);
 
     // Country
@@ -240,12 +230,12 @@ fn create_location_section(config: &Rc<RefCell<Config>>) -> Box {
         .label("Country:")
         .halign(gtk::Align::Start)
         .build();
-    
+
     let country_entry = Entry::builder()
         .placeholder_text("Enter country code (e.g., US, CA)")
         .hexpand(true)
         .build();
-    
+
     country_entry.set_text(&config.borrow().default_location.country);
 
     // Connect entry changes to config

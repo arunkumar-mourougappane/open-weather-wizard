@@ -1,5 +1,5 @@
 //! Configuration management for Weather Wizard
-//! 
+//!
 //! This module handles loading and saving application configuration,
 //! including API keys, preferred weather service, and default location.
 
@@ -8,16 +8,11 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Supported weather API providers
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum WeatherProvider {
+    #[default]
     OpenWeather,
     GoogleWeather,
-}
-
-impl Default for WeatherProvider {
-    fn default() -> Self {
-        WeatherProvider::OpenWeather
-    }
 }
 
 /// Application configuration structure
@@ -62,12 +57,12 @@ impl Config {
         let mut path = dirs::home_dir().ok_or("Could not find home directory")?;
         path.push(".config");
         path.push("weather-wizard");
-        
+
         // Create the directory if it doesn't exist
         if !path.exists() {
             fs::create_dir_all(&path)?;
         }
-        
+
         path.push("config.json");
         Ok(path)
     }
@@ -75,7 +70,7 @@ impl Config {
     /// Load configuration from file, or create default if file doesn't exist
     pub fn load() -> Result<Config, Box<dyn std::error::Error>> {
         let config_path = Self::config_file_path()?;
-        
+
         if config_path.exists() {
             let config_str = fs::read_to_string(&config_path)?;
             let config: Config = serde_json::from_str(&config_str)?;

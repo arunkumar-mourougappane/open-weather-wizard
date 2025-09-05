@@ -38,9 +38,9 @@ use ui::build_elements::{
     build_spinner,
 };
 
+use crate::config::{Config, WeatherProvider};
 use crate::ui::build_elements::update_ui_with_weather;
 use crate::weather_api::openweather_api::{self, ApiError, Location}; // For glib::ExitCode
-use crate::config::{Config, WeatherProvider};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -49,7 +49,7 @@ fn build_main_ui() -> Application {
     let application = Application::builder()
         .application_id("com.example.FirstGtkApp") // Unique application ID
         .build();
-    
+
     application.connect_activate(|app| {
         // Load configuration
         let config = match Config::load() {
@@ -60,7 +60,7 @@ fn build_main_ui() -> Application {
             }
         };
         let config = Rc::new(RefCell::new(config));
-        
+
         // Create a new application window
         let window = ApplicationWindow::builder()
             .application(app) // Associate the window with the application
@@ -92,18 +92,18 @@ fn build_main_ui() -> Application {
 
         vbox.append(&menubar);
         vbox.append(&location_box);
-        
+
         // Create and add entry fields with default values from config
         let default_location = &config.borrow().default_location;
         let city_entry = build_entry("City".to_string());
         city_entry.set_text(&default_location.city);
         location_box.append(&city_entry);
-        
+
         // State and Country entries
         let state_entry = build_entry("State".to_string());
         state_entry.set_text(&default_location.state);
         location_box.append(&state_entry);
-        
+
         let country_entry = build_entry("Country".to_string());
         country_entry.set_text(&default_location.country);
         location_box.append(&country_entry);
@@ -161,7 +161,7 @@ fn build_main_ui() -> Application {
             let weather_symbol_image_clone = weather_symbol_image.clone();
             let spinner = spinner.clone();
             let config = config_for_button.clone();
-            
+
             // Get the city name from the entry field
             let city = city_entry_clone.text().to_string();
             if city.is_empty() {
@@ -181,7 +181,7 @@ fn build_main_ui() -> Application {
                 spinner.start(); // Start the spinner animation
                 spinner.set_visible(true); // Make the spinner visible
                 description_label_clone.set_text("Fetching weather...");
-                
+
                 let location = Location {
                     state: Some(state.clone()),
                     country: Some(country.clone()),
@@ -189,20 +189,19 @@ fn build_main_ui() -> Application {
                     lat: 0.0,
                     lon: 0.0,
                 };
-                
+
                 // Get the weather data based on selected API
                 let result = match config.borrow().weather_provider {
-                    WeatherProvider::OpenWeather => {
-                        openweather_api::get_weather(&location).await
-                    },
+                    WeatherProvider::OpenWeather => openweather_api::get_weather(&location).await,
                     WeatherProvider::GoogleWeather => {
                         crate::weather_api::google_weather_api::get_weather(
-                            &location, 
-                            &config.borrow().google_weather_api_key
-                        ).await
-                    },
+                            &location,
+                            &config.borrow().google_weather_api_key,
+                        )
+                        .await
+                    }
                 };
-                
+
                 spinner.stop(); // Stop the spinner animation
                 spinner.set_visible(false); // Hide the spinner
                 match result {
