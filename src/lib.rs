@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn test_arc_mutex_config_access() {
         use std::sync::{Arc, Mutex};
-        
+
         let config = AppConfig {
             weather_provider: WeatherApiProvider::OpenWeather,
             api_token_encoded: STANDARD.encode("test_token"),
@@ -72,23 +72,23 @@ mod tests {
                 country: "TC".to_string(),
             },
         };
-        
+
         let shared_config = Arc::new(Mutex::new(config));
-        
+
         // Test reading from the Arc<Mutex<AppConfig>>
         {
             let config_guard = shared_config.lock().unwrap();
             assert_eq!(config_guard.location.city, "Test City");
             assert_eq!(config_guard.get_api_token().unwrap(), "test_token");
         }
-        
+
         // Test writing to the Arc<Mutex<AppConfig>>
         {
             let mut config_guard = shared_config.lock().unwrap();
             config_guard.location.city = "Updated City".to_string();
             config_guard.set_api_token("new_token");
         }
-        
+
         // Verify the changes
         {
             let config_guard = shared_config.lock().unwrap();

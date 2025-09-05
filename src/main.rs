@@ -44,6 +44,7 @@ use crate::weather_api::openweather_api::ApiError;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
 use std::sync::{Arc, Mutex};
 
+#[allow(clippy::await_holding_lock)]
 fn build_main_ui() -> Application {
     // Load configuration
     let config_manager = ConfigManager::new().expect("Failed to create config manager");
@@ -151,7 +152,6 @@ fn build_main_ui() -> Application {
                 spinner.start(); // Start the spinner animation
                 spinner.set_visible(true); // Make the spinner visible
                 description_label_clone.set_text("Fetching weather...");
-
                 let current_config = config_clone.lock().expect("Failed to lock config");
                 let location_config = current_config.location.clone();
                 let provider_type = current_config.weather_provider.clone();
