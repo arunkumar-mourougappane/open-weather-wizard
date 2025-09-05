@@ -4,10 +4,10 @@
 //! for demonstration purposes. It returns sample weather data instead
 //! of making actual API calls.
 
-use async_trait::async_trait;
 use crate::config::LocationConfig;
-use crate::weather_api::openweather_api::{ApiResponse, ApiError, Weather, Main};
+use crate::weather_api::openweather_api::{ApiError, ApiResponse, Main, Weather};
 use crate::weather_api::weather_provider::WeatherProvider;
+use async_trait::async_trait;
 
 /// Google Weather API provider (mockup implementation)
 pub struct GoogleWeatherProvider;
@@ -21,12 +21,16 @@ impl GoogleWeatherProvider {
 #[async_trait]
 impl WeatherProvider for GoogleWeatherProvider {
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError> {
-        log::info!("Google Weather API (mockup) called for location: {}, {}, {}", 
-                   location.city, location.state, location.country);
-        
+        log::info!(
+            "Google Weather API (mockup) called for location: {}, {}, {}",
+            location.city,
+            location.state,
+            location.country
+        );
+
         // Simulate API delay
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-        
+
         // Return mock weather data
         let mock_response = ApiResponse {
             weather: vec![Weather {
@@ -39,7 +43,7 @@ impl WeatherProvider for GoogleWeatherProvider {
             },
             name: location.city.clone(),
         };
-        
+
         log::info!("Google Weather API (mockup) returning mock data");
         Ok(mock_response)
     }

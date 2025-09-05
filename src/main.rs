@@ -34,23 +34,22 @@ mod config;
 mod ui;
 mod weather_api;
 use ui::build_elements::{
-    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_main_menu,
-    build_spinner,
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_main_menu, build_spinner,
 };
 
-use crate::ui::build_elements::update_ui_with_weather;
-use crate::weather_api::openweather_api::ApiError;
 use crate::config::ConfigManager;
-use crate::weather_api::weather_provider::WeatherProviderFactory;
+use crate::ui::build_elements::update_ui_with_weather;
 use crate::ui::preferences::show_preferences_window;
-use std::rc::Rc;
+use crate::weather_api::openweather_api::ApiError;
+use crate::weather_api::weather_provider::WeatherProviderFactory;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 fn build_main_ui() -> Application {
     // Load configuration
     let config_manager = ConfigManager::new().expect("Failed to create config manager");
     let config = Rc::new(RefCell::new(config_manager.load_config()));
-    
+
     // Create a new GTK application
     let application = Application::builder()
         .application_id("com.example.FirstGtkApp") // Unique application ID
@@ -147,25 +146,26 @@ fn build_main_ui() -> Application {
             let weather_symbol_image_clone = weather_symbol_image.clone();
             let spinner = spinner.clone();
             let config_clone = config_for_button.clone();
-            
+
             // Use glib::spawn_future_local to run our async API call without blocking the UI
             glib::spawn_future_local(async move {
                 spinner.start(); // Start the spinner animation
                 spinner.set_visible(true); // Make the spinner visible
                 description_label_clone.set_text("Fetching weather...");
-                
+
                 let current_config = config_clone.borrow();
                 let location_config = current_config.location.clone();
                 let provider_type = current_config.weather_provider.clone();
                 let api_token = current_config.get_api_token().ok();
                 drop(current_config); // Release the borrow
-                
+
                 // Create weather provider
-                let provider_result = WeatherProviderFactory::create_provider(&provider_type, api_token);
-                
+                let provider_result =
+                    WeatherProviderFactory::create_provider(&provider_type, api_token);
+
                 spinner.stop(); // Stop the spinner animation
                 spinner.set_visible(false); // Hide the spinner
-                
+
                 match provider_result {
                     Ok(provider) => {
                         // Call the weather API through the provider
