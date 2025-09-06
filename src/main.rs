@@ -34,7 +34,7 @@ mod config;
 mod ui;
 mod weather_api;
 use ui::build_elements::{
-    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_button, build_main_menu, build_spinner,
+    DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_main_menu, build_spinner,
 };
 
 use crate::config::ConfigManager;
@@ -43,6 +43,69 @@ use crate::ui::preferences::show_preferences_window;
 use crate::weather_api::openweather_api::ApiError;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
 use std::sync::{Arc, Mutex};
+
+/// Fetches weather data and updates the UI
+#[allow(clippy::await_holding_lock)]
+async fn fetch_and_update_weather(
+    config: Arc<Mutex<crate::config::AppConfig>>,
+    weather_symbol_image: &Image,
+    temp_label: &Label,
+    description_label: &Label,
+    humidity_label: &Label,
+    spinner: &gtk::Spinner,
+) {
+    spinner.start(); // Start the spinner animation
+    spinner.set_visible(true); // Make the spinner visible
+    description_label.set_text("Fetching weather...");
+    
+    let current_config = config.lock().expect("Failed to lock config");
+    let location_config = current_config.location.clone();
+    let provider_type = current_config.weather_provider.clone();
+    let api_token = current_config.get_api_token().ok();
+    drop(current_config); // Release the lock
+
+    // Create weather provider
+    let provider_result = WeatherProviderFactory::create_provider(&provider_type, api_token);
+
+    spinner.stop(); // Stop the spinner animation
+    spinner.set_visible(false); // Hide the spinner
+
+    match provider_result {
+        Ok(provider) => {
+            // Call the weather API through the provider
+            match provider.get_weather(&location_config).await {
+                Ok(weather_data) => {
+                    match update_ui_with_weather(
+                        &weather_data,
+                        weather_symbol_image,
+                        temp_label,
+                        description_label,
+                        humidity_label,
+                    ) {
+                        Ok(()) => {}
+                        Err(e) => {
+                            description_label.set_text(&format!("Error: {}", e));
+                            weather_symbol_image.set_from_pixbuf(None);
+                        }
+                    }
+                }
+                Err(e) => {
+                    let error_message = match e {
+                        ApiError::CityNotFound => "City not found.",
+                        ApiError::RequestFailed(_) => "Network request failed.",
+                        ApiError::InvalidResponse => "Could not parse server response.",
+                    };
+                    description_label.set_text(error_message);
+                    weather_symbol_image.set_from_pixbuf(None);
+                }
+            }
+        }
+        Err(e) => {
+            description_label.set_text(&format!("Configuration error: {}", e));
+            weather_symbol_image.set_from_pixbuf(None);
+        }
+    }
+}
 
 #[allow(clippy::await_holding_lock)]
 fn build_main_ui() -> Application {
@@ -112,11 +175,6 @@ fn build_main_ui() -> Application {
         temp_label.add_css_class("weather-temp");
         humidity_label.add_css_class("weather-humidity");
 
-        // Create a button
-        let weather_button = build_button("Get Weather".to_string());
-        // Add the button to the window
-        vbox.append(&weather_button);
-
         // Create and add a spinner
         let spinner: gtk::Spinner = build_spinner(40);
         spinner.set_visible(false);
@@ -137,71 +195,75 @@ fn build_main_ui() -> Application {
         main_box.append(&description_label);
         main_box.append(&humidity_label);
 
-        let config_for_button = config_clone.clone();
-        weather_button.connect_clicked(move |_| {
-            // Clone the widgets that we need to modify inside the button's click handler
-            let temp_label_clone = temp_label.clone();
-            let description_label_clone = description_label.clone();
-            let humidity_label_clone = humidity_label.clone();
-            let weather_symbol_image_clone = weather_symbol_image.clone();
-            let spinner = spinner.clone();
-            let config_clone = config_for_button.clone();
+        // Set up automatic weather updates
+        let config_for_updates = config_clone.clone();
+        let weather_symbol_image_clone = weather_symbol_image.clone();
+        let temp_label_clone = temp_label.clone();
+        let description_label_clone = description_label.clone();
+        let humidity_label_clone = humidity_label.clone();
+        let spinner_clone = spinner.clone();
 
-            // Use glib::spawn_future_local to run our async API call without blocking the UI
+        // Initial weather fetch on startup
+        {
+            let config = config_for_updates.clone();
+            let image = weather_symbol_image_clone.clone();
+            let temp = temp_label_clone.clone();
+            let desc = description_label_clone.clone();
+            let humidity = humidity_label_clone.clone();
+            let spinner = spinner_clone.clone();
+            
             glib::spawn_future_local(async move {
-                spinner.start(); // Start the spinner animation
-                spinner.set_visible(true); // Make the spinner visible
-                description_label_clone.set_text("Fetching weather...");
-                let current_config = config_clone.lock().expect("Failed to lock config");
-                let location_config = current_config.location.clone();
-                let provider_type = current_config.weather_provider.clone();
-                let api_token = current_config.get_api_token().ok();
-                drop(current_config); // Release the lock
-
-                // Create weather provider
-                let provider_result =
-                    WeatherProviderFactory::create_provider(&provider_type, api_token);
-
-                spinner.stop(); // Stop the spinner animation
-                spinner.set_visible(false); // Hide the spinner
-
-                match provider_result {
-                    Ok(provider) => {
-                        // Call the weather API through the provider
-                        match provider.get_weather(&location_config).await {
-                            Ok(weather_data) => {
-                                match update_ui_with_weather(
-                                    &weather_data,
-                                    &weather_symbol_image_clone,
-                                    &temp_label_clone,
-                                    &description_label_clone,
-                                    &humidity_label_clone,
-                                ) {
-                                    Ok(()) => {}
-                                    Err(e) => {
-                                        description_label_clone.set_text(&format!("Error: {}", e));
-                                        weather_symbol_image_clone.set_from_pixbuf(None);
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                let error_message = match e {
-                                    ApiError::CityNotFound => "City not found.",
-                                    ApiError::RequestFailed(_) => "Network request failed.",
-                                    ApiError::InvalidResponse => "Could not parse server response.",
-                                };
-                                description_label_clone.set_text(error_message);
-                                weather_symbol_image_clone.set_from_pixbuf(None);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        description_label_clone.set_text(&format!("Configuration error: {}", e));
-                        weather_symbol_image_clone.set_from_pixbuf(None);
-                    }
-                }
+                fetch_and_update_weather(config, &image, &temp, &desc, &humidity, &spinner).await;
             });
-        });
+        }
+
+        // Set up 30-second timer for automatic updates
+        {
+            let config = config_for_updates.clone();
+            let image = weather_symbol_image_clone.clone();
+            let temp = temp_label_clone.clone();
+            let desc = description_label_clone.clone();
+            let humidity = humidity_label_clone.clone();
+            let spinner = spinner_clone.clone();
+            
+            glib::timeout_add_seconds_local(30, move || {
+                let config = config.clone();
+                let image = image.clone();
+                let temp = temp.clone();
+                let desc = desc.clone();
+                let humidity = humidity.clone();
+                let spinner = spinner.clone();
+                
+                glib::spawn_future_local(async move {
+                    fetch_and_update_weather(config, &image, &temp, &desc, &humidity, &spinner).await;
+                });
+                
+                glib::ControlFlow::Continue
+            });
+        }
+
+        // Set up focus event handler for updates when window comes into focus
+        {
+            let config = config_for_updates.clone();
+            let image = weather_symbol_image_clone.clone();
+            let temp = temp_label_clone.clone();
+            let desc = description_label_clone.clone();
+            let humidity = humidity_label_clone.clone();
+            let spinner = spinner_clone.clone();
+            
+            window.connect_is_active_notify(move |_| {
+                let config = config.clone();
+                let image = image.clone();
+                let temp = temp.clone();
+                let desc = desc.clone();
+                let humidity = humidity.clone();
+                let spinner = spinner.clone();
+                
+                glib::spawn_future_local(async move {
+                    fetch_and_update_weather(config, &image, &temp, &desc, &humidity, &spinner).await;
+                });
+            });
+        }
 
         vbox.append(&main_box);
         window.set_child(Some(&vbox));

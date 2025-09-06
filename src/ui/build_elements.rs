@@ -1,5 +1,4 @@
 use glib::Bytes;
-use gtk::Button;
 use gtk::Label;
 use gtk::gdk_pixbuf::Pixbuf;
 use gtk::gio;
@@ -52,18 +51,6 @@ pub fn build_main_menu() -> Menu {
     root_menu.append_submenu(Some("Help"), &about_help);
 
     root_menu
-}
-
-pub fn build_button(label: String) -> Button {
-    // Create a button with a label
-
-    Button::builder()
-        .label(label.as_str())
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .build()
 }
 
 fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
