@@ -35,14 +35,14 @@ pub fn build_spinner(diameter: i32) -> gtk::Spinner {
 
 pub fn build_main_menu() -> Menu {
     let file_menu = Menu::new();
-    let preferences_item = MenuItem::new(Some("Preferences"), None);
-    let exit_item = MenuItem::new(Some("Exit"), None);
+    let preferences_item = MenuItem::new(Some("Preferences"), Some("app.preferences"));
+    let exit_item = MenuItem::new(Some("Exit"), Some("app.quit"));
     file_menu.append_item(&preferences_item);
     file_menu.append_item(&exit_item);
 
     let about_help = Menu::new();
-    let about_menu = MenuItem::new(Some("About"), None);
-    let help_menu = MenuItem::new(Some("Help"), None);
+    let about_menu = MenuItem::new(Some("About"), Some("app.about"));
+    let help_menu = MenuItem::new(Some("Help"), Some("app.help"));
     about_help.append_item(&about_menu);
     about_help.append_item(&help_menu);
 
@@ -59,16 +59,6 @@ pub fn build_button(label: String) -> Button {
 
     Button::builder()
         .label(label.as_str())
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .build()
-}
-
-pub fn build_entry(label: String) -> gtk::Entry {
-    gtk::Entry::builder()
-        .placeholder_text(label.as_str())
         .margin_top(12)
         .margin_bottom(12)
         .margin_start(12)
