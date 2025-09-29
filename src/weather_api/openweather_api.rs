@@ -1,47 +1,21 @@
-//! This module provides functionality to fetch and parse weather data from the OpenWeatherMap API.
+//! # OpenWeatherMap API Provider
 //!
 //! # Overview
 //!
-//! The module defines data structures to deserialize relevant fields from the OpenWeatherMap API JSON response,
-//! as well as a custom error type for improved error handling. The main function, `get_weather`, asynchronously
-//! retrieves weather information for a specified city using a provided API key.
+//! This module provides the implementation for fetching and parsing weather data
+//! from the OpenWeatherMap API.
 //!
-//! # Structs
+//! ## Features
 //!
-//! - `Weather`: Represents weather conditions, including the main type and description.
-//! - `Main`: Contains temperature and humidity data.
-//! - `ApiResponse`: Aggregates weather, main, and city name information from the API response.
+//! - **Geocoding**: Converts a city name into geographic coordinates (latitude/longitude).
+//! - **Weather Fetching**: Retrieves current weather data for the given coordinates.
+//! - **Data Structures**: Defines Rust structs (`ApiResponse`, `Weather`, `Main`) that
+//!   map directly to the JSON responses from the API.
+//! - **Error Handling**: Provides specific error types (`ApiError`, `GeocodeError`) for
+//!   robust error management.
+//! - **Provider Implementation**: Implements the `WeatherProvider` trait for seamless
+//!   integration into the application's provider factory.
 //!
-//! # Errors
-//!
-//! - `ApiError`: Enumerates possible errors, such as request failures, city not found, and invalid responses.
-//!
-//! # Functions
-//!
-//! - `get_weather`: Asynchronously fetches weather data for a given city and API key, returning either the parsed
-//!   response or an error.
-//!
-//! # Example
-//!
-//! ```rust
-//! use open_wearther_wizard::weather_api::openweather_api::{get_weather, Location};
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     let location = Location {
-//!         name: "London".to_string(),
-//!         lat: 0.0,
-//!         lon: 0.0,
-//!         country: Some("UK".to_string()),
-//!         state: None,
-//!     };
-//!     let api_key = "your_api_key";
-//!     match get_weather(&location, api_key).await {
-//!         Ok(response) => println!("{:?}", response),
-//!         Err(e) => eprintln!("Error: {:?}", e),
-//!     }
-//! }
-//! ```
 use crate::config::LocationConfig;
 use crate::weather_api::weather_provider::{WeatherProvider, location_config_to_location};
 use async_trait::async_trait;
@@ -51,11 +25,6 @@ use serde::Deserialize;
 /// Represents weather conditions returned by the OpenWeatherMap API.
 ///
 /// This struct contains the main weather type (e.g., "Clouds", "Rain") and a more detailed description
-/// (e.g., "scattered clouds", "light rain").
-///
-/// # Fields
-/// - `main`: The primary weather condition.
-/// - `description`: A textual description of the weather.
 #[derive(Deserialize, Debug)]
 pub struct Weather {
     pub main: String,
@@ -65,11 +34,6 @@ pub struct Weather {
 /// Contains the main meteorological data like temperature and humidity.
 ///
 /// This struct is part of the `ApiResponse` and holds the primary weather metrics
-/// returned by the OpenWeatherMap API.
-///
-/// # Fields
-/// - `temp`: The current temperature in Celsius.
-/// - `humidity`: The current humidity level in percent.
 #[derive(Deserialize, Debug)]
 pub struct Main {
     pub temp: f64,
@@ -80,11 +44,6 @@ pub struct Main {
 ///
 /// This struct aggregates the most relevant weather information, including a list of weather
 /// conditions, the main meteorological data like temperature and humidity, and the name of the city.
-///
-/// # Fields
-/// - `weather`: A vector of `Weather` structs. Typically contains a single element describing the primary weather condition.
-/// - `main`: A `Main` struct containing key meteorological data such as temperature and humidity.
-/// - `name`: The name of the city corresponding to the weather data.
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 pub struct ApiResponse {
@@ -95,13 +54,10 @@ pub struct ApiResponse {
 
 /// Represents possible errors that can occur when interacting with the OpenWeatherMap API.
 ///
-/// This enum provides detailed error variants to help distinguish between different failure modes:
-///
+/// This enum provides detailed error variants to distinguish between different failure modes:
 /// - `RequestFailed`: Indicates a network or HTTP error occurred during the API request.
 /// - `CityNotFound`: Returned when the requested city does not exist or cannot be found by the API.
 /// - `InvalidResponse`: Indicates that the response from the API could not be parsed or was malformed.
-///
-/// Use this type to handle errors gracefully and provide informative feedback to users.
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum ApiError {
@@ -110,6 +66,7 @@ pub enum ApiError {
     InvalidResponse,
 }
 
+/// Represents a symbolic representation of a weather condition.
 #[derive(Debug)]
 pub enum WeatherSymbol {
     Clear,
@@ -130,7 +87,9 @@ pub enum WeatherSymbol {
     Default,
 }
 
-// This struct matches the structure of the JSON objects inside the array
+/// Represents a geographic location returned by the Geocoding API.
+///
+/// This struct matches the structure of the JSON objects in the array
 // returned by the OpenWeatherMap Geocoding API.
 #[derive(Deserialize, Debug)]
 pub struct Location {
@@ -142,23 +101,24 @@ pub struct Location {
     pub state: Option<String>,
 }
 
-// Custom error types for clearer error handling.
+/// Represents possible errors that can occur when geocoding a location.
 #[derive(Debug)]
 pub enum GeocodeError {
     RequestFailed(reqwest::Error),
     LocationNotFound,
 }
 
-/// Fetches geographic coordinates for a given location.
+/// Fetches geographic coordinates for a given location using the OpenWeatherMap Geocoding API.
+///
+/// This function constructs a query from the city, state, and country, then calls the
+/// `geo/1.0/direct` endpoint. It requests a single result (`limit=1`) to get the most
+/// relevant location.
 ///
 /// # Arguments
 /// * `city` - The name of the city.
 /// * `state` - The state or region (can be empty).
 /// * `country` - The country code (e.g., "US", "CA").
 /// * `api_key` - Your OpenWeatherMap API key.
-///
-/// # Returns
-/// A `Result` containing the first found `Location` or a `GeocodeError`.
 async fn get_coords(
     city: &str,
     state: &str,
@@ -195,14 +155,15 @@ async fn get_coords(
         .ok_or(GeocodeError::LocationNotFound)
 }
 
-/// Asynchronously fetches weather data for a given location.
+/// Fetches weather data for a given location using the OpenWeatherMap API.
+///
+/// This is a two-step process:
+/// 1. It first calls `get_coords` to convert the location name into latitude and longitude.
+/// 2. It then uses these coordinates to fetch the current weather data.
 ///
 /// # Arguments
 /// * `location` - The location to fetch weather for.
 /// * `api_key` - Your personal OpenWeatherMap API key.
-///
-/// # Returns
-/// A `Result` containing the `ApiResponse` on success, or an `ApiError` on failure.
 pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiResponse, ApiError> {
     // Get coordinates for the location
     let weather_location = get_coords(
@@ -246,7 +207,13 @@ pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiRespon
     }
 }
 
-/// Returns a `WeatherSymbol` enum variant based on the main weather condition string.
+/// Maps a weather condition string from the API to a `WeatherSymbol` enum.
+///
+/// This allows the application to associate a specific icon or behavior with a
+/// generalized weather condition.
+///
+/// # Arguments
+/// * `weather_condition` - The "main" weather string from the API (e.g., "Clear", "Rain").
 pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
     log::info!(
         "Mapping weather condition '{}' to symbol",
@@ -272,12 +239,16 @@ pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
     }
 }
 
-/// OpenWeather API provider implementation
+/// An implementation of the `WeatherProvider` trait for the OpenWeatherMap service.
 pub struct OpenWeatherProvider {
     api_key: String,
 }
 
 impl OpenWeatherProvider {
+    /// Creates a new `OpenWeatherProvider` with the given API key.
+    ///
+    /// # Arguments
+    /// * `api_key` - The API key for the OpenWeatherMap service.
     pub fn new(api_key: String) -> Self {
         Self { api_key }
     }
@@ -285,15 +256,21 @@ impl OpenWeatherProvider {
 
 #[async_trait]
 impl WeatherProvider for OpenWeatherProvider {
+    /// Fetches weather data by implementing the `WeatherProvider` trait.
+    ///
+    /// This function converts the application's `LocationConfig` into a `Location`
+    /// struct suitable for the API and then calls the internal `get_weather` function.
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError> {
         let api_location = location_config_to_location(location);
         get_weather(&api_location, &self.api_key).await
     }
 
+    /// Returns the display name of the provider.
     fn name(&self) -> &'static str {
         "OpenWeather"
     }
 
+    /// Returns `true` as this provider requires an API key.
     fn requires_api_key(&self) -> bool {
         true
     }

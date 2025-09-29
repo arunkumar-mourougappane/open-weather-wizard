@@ -1,6 +1,25 @@
+//!
+//! This example serves as a comprehensive demonstration of the `meteo-wizard`
+//! library's core functionalities. It is a command-line program that walks
+//! through several key features to verify their behavior.
+//!
+//! The demo covers:
+//! 1.  **Configuration Management**: Creating an `AppConfig`, setting an API token
+//!     (which gets base64 encoded), and then decoding it.
+//! 2.  **Weather Provider Abstraction**: Using the `WeatherProviderFactory` to
+//!     create a provider (in this case, the Google Weather mock) and fetching
+//!     weather data.
+//! 3.  **Serialization**: Demonstrating the serialization of the `AppConfig`
+//!     struct to a JSON string and deserializing it back.
+
 use open_wearther_wizard::config::{AppConfig, LocationConfig, WeatherApiProvider};
 use open_wearther_wizard::weather_api::weather_provider::WeatherProviderFactory;
 
+/// The main entry point for the library functionality demo.
+///
+/// This asynchronous function executes a series of tests and prints the results
+/// to the console, providing a clear, step-by-step showcase of the library's
+/// capabilities.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Weather Wizard Functionality Demo");

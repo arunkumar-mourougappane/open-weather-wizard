@@ -1,26 +1,43 @@
-/* src/style.css */
+/**
+ * # Main Stylesheet for Weather Wizard
+ *
+ * This CSS file defines the visual styling for the GTK widgets in the Weather Wizard
+ * application. It uses CSS classes to apply specific styles to labels and images,
+ * controlling font sizes, weights, and other visual properties to create a clean
+ * and readable user interface.
+ */
 
-/* Style for the main weather emoji */
+/*
+ * Style for the weather icon/image.
+ * This class is applied to the `gtk::Image` widget that displays the weather symbol.
+ * Note: The size is primarily controlled by `set_pixel_size` in the Rust code.
+ */
 .weather-symbol {
-    width: 256px;
-    height: 256px;
-    font-size: 80px;
+    font-size: 80px; /* Fallback size if image is not loaded */
     font-weight: bold;
 }
 
-/* Style for the temperature reading */
+/*
+ * Style for the main temperature label.
+ * This class makes the temperature reading large and bold, making it the
+ * most prominent piece of information in the UI.
+ */
 .weather-temp {
     font-size: 30px;
     font-weight: bold;
 }
 
-/* Style for the text description (e.g., "broken clouds") */
+/*
+ * Style for the weather condition description label (e.g., "broken clouds").
+ * This class applies a smaller, italicized font to provide secondary information
+ * without distracting from the main temperature reading.
+ */
 .weather-description {
     font-size: 18px;
     font-style: italic;
 }
 
-/* Style for the humidity reading */
+/* Style for the humidity label. */
 .weather-humidity {
     font-size: 14px;
 }

@@ -1,3 +1,20 @@
+//! # Main UI Module
+//!
+//! This module orchestrates the entire user interface of the Weather Wizard application.
+//! It is responsible for:
+//!
+//! - **Building the Application**: Creating the main `gtk::Application` instance.
+//! - **Window and Widget Setup**: Constructing the main application window, menu bar,
+//!   labels, and other widgets upon application activation.
+//! - **State Management**: Managing the application's configuration (`AppConfig`)
+//!   using an `Arc<Mutex<>>` for safe concurrent access.
+//! - **Asynchronous Operations**: Spawning asynchronous tasks with `glib::spawn_future_local`
+//!   to fetch weather data without blocking the UI thread.
+//! - **UI Updates**: Handling the logic to update UI elements with new weather data or
+//!   error messages.
+//! - **Event Handling**: Connecting signals for menu actions (like "Preferences" and "Quit")
+//!   and setting up a periodic timer for automatic weather updates.
+
 pub mod build_elements;
 pub mod preferences;
 
@@ -15,7 +32,10 @@ use crate::ui::preferences::show_preferences_window;
 use crate::weather_api::openweather_api::ApiError;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
 
-/// A container for the UI widgets that need to be updated.
+/// A container for UI widgets that need to be accessed and updated dynamically.
+///
+/// This struct is cloneable and holds references to the GTK widgets that display
+/// weather information, allowing them to be easily passed between functions and closures.
 #[derive(Clone)]
 pub struct UIWidgets {
     temp_label: Label,
@@ -25,7 +45,76 @@ pub struct UIWidgets {
     spinner: gtk::Spinner,
 }
 
+/// A unified error type for the application's UI and backend logic.
+///
+/// This enum consolidates errors from different parts of the application, such as
+/// configuration issues, API failures, and UI rendering problems, into a single type.
+enum AppError {
+    Config(String),
+    Api(ApiError),
+    Ui(anyhow::Error),
+}
+
+impl From<ApiError> for AppError {
+    fn from(e: ApiError) -> Self {
+        AppError::Api(e)
+    }
+}
+
+impl From<anyhow::Error> for AppError {
+    fn from(e: anyhow::Error) -> Self {
+        AppError::Ui(e)
+    }
+}
+
+/// Asynchronously fetches weather data and triggers a UI update.
+///
+/// This function reads the current configuration, creates the appropriate weather provider,
+/// fetches the weather data, and then calls `update_ui_with_weather` to refresh the
+/// display. It handles the conversion of different error types into the unified `AppError`.
+///
+/// # Arguments
+///
+/// * `widgets` - A reference to the `UIWidgets` struct containing the UI elements to update.
+/// * `config` - An `Arc<Mutex<Config>>` containing the application's configuration.
+///
+/// # Errors
+/// Returns an `AppError` if configuration is invalid, the API call fails, or the UI update fails.
 #[allow(clippy::await_holding_lock)]
+async fn fetch_weather_data(
+    widgets: &UIWidgets,
+    config: &Arc<Mutex<Config>>,
+) -> Result<(), AppError> {
+    #[allow(clippy::await_holding_lock)]
+    let current_config = config.lock().expect("Failed to lock config");
+    let location_config = current_config.location.clone();
+    let provider_type = current_config.weather_provider.clone();
+    let api_token = current_config.get_api_token().ok();
+    drop(current_config);
+
+    let provider = WeatherProviderFactory::create_provider(&provider_type, api_token)
+        .map_err(|e| AppError::Config(e.to_string()))?;
+    let weather_data = provider.get_weather(&location_config).await?;
+
+    update_ui_with_weather(&weather_data, widgets)?;
+
+    Ok(())
+}
+
+/// Spawns a non-blocking task to fetch and update weather data in the UI.
+///
+/// This function wraps the asynchronous `fetch_weather_data` call in a `glib::spawn_future_local`.
+/// It manages the UI state during the fetch operation by:
+/// 1. Showing and starting a spinner.
+/// 2. Displaying a "Fetching weather..." message.
+/// 3. On success, the UI is updated with weather data.
+/// 4. On failure, an appropriate error message is displayed to the user.
+/// 5. Hiding and stopping the spinner when the operation is complete.
+///
+/// # Arguments
+///
+/// * `widgets` - A reference to the `UIWidgets` struct containing the UI elements to update.
+/// * `config` - An `Arc<Mutex<Config>>` containing the application's configuration.
 fn fetch_and_update_weather(widgets: &UIWidgets, config: &Arc<Mutex<Config>>) {
     let widgets_clone = widgets.clone();
     let config_clone = Arc::clone(config);
@@ -37,47 +126,34 @@ fn fetch_and_update_weather(widgets: &UIWidgets, config: &Arc<Mutex<Config>>) {
             .description_label
             .set_text("Fetching weather...");
 
-        let current_config = config_clone.lock().expect("Failed to lock config");
-        let location_config = current_config.location.clone();
-        let provider_type = current_config.weather_provider.clone();
-        let api_token = current_config.get_api_token().ok();
-        drop(current_config);
-
-        let provider_result = WeatherProviderFactory::create_provider(&provider_type, api_token);
+        if let Err(e) = fetch_weather_data(&widgets_clone, &config_clone).await {
+            let error_message = match e {
+                AppError::Config(msg) => format!("Configuration error: {}", msg),
+                AppError::Api(api_error) => match api_error {
+                    ApiError::CityNotFound => "City not found.".to_string(),
+                    ApiError::RequestFailed(_) => "Network request failed.".to_string(),
+                    ApiError::InvalidResponse => "Could not parse server response.".to_string(),
+                },
+                AppError::Ui(ui_error) => format!("UI error: {}", ui_error),
+            };
+            widgets_clone.description_label.set_text(&error_message);
+            widgets_clone.weather_symbol_image.set_from_pixbuf(None);
+        }
 
         widgets_clone.spinner.stop();
         widgets_clone.spinner.set_visible(false);
-
-        match provider_result {
-            Ok(provider) => match provider.get_weather(&location_config).await {
-                Ok(weather_data) => {
-                    if let Err(e) = update_ui_with_weather(&weather_data, &widgets_clone) {
-                        widgets_clone
-                            .description_label
-                            .set_text(&format!("Error: {}", e));
-                        widgets_clone.weather_symbol_image.set_from_pixbuf(None);
-                    }
-                }
-                Err(e) => {
-                    let error_message = match e {
-                        ApiError::CityNotFound => "City not found.",
-                        ApiError::RequestFailed(_) => "Network request failed.",
-                        ApiError::InvalidResponse => "Could not parse server response.", // Invalid API key can also cause this
-                    };
-                    widgets_clone.description_label.set_text(error_message);
-                    widgets_clone.weather_symbol_image.set_from_pixbuf(None);
-                }
-            },
-            Err(e) => {
-                widgets_clone
-                    .description_label
-                    .set_text(&format!("Configuration error: {}", e));
-                widgets_clone.weather_symbol_image.set_from_pixbuf(None);
-            }
-        }
     });
 }
 
+/// Builds and configures the main GTK application.
+///
+/// This function is the entry point for the UI. It initializes the `gtk::Application`,
+/// loads the configuration, and connects the `activate` signal to a closure that
+/// builds the main window, its widgets, and sets up all event handlers and timers.
+///
+/// # Returns
+///
+/// A `gtk::Application` instance.
 pub fn build_main_ui() -> Application {
     // Load configuration
     let config_manager = ConfigManager::new().expect("Failed to create config manager");

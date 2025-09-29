@@ -1,9 +1,19 @@
-//! Preferences window for the Weather Wizard application.
+//! # Preferences Window Module
 //!
-//! This module provides a preferences window that allows users to configure:
-//! - Weather API provider selection
-//! - API tokens for weather services
-//! - Location settings (city, state, country)
+//! This module is responsible for creating and managing the application's
+//! preferences window. The window is a modal dialog that allows users to
+//! configure various settings, which are then persisted to a configuration file.
+//!
+//! Key features of the preferences window include:
+//! - **API Provider Selection**: A dropdown to choose between different weather
+//!   services (e.g., OpenWeather, Google Weather).
+//! - **API Token Management**: A secure entry field for the user's API token.
+//! - **Location Configuration**: Fields for setting the default city, state, and country.
+//!
+//! The window is built using GTK widgets and interacts with the main application's
+//! shared configuration state (`Arc<Mutex<AppConfig>>`). When settings are saved,
+//! it updates this shared state, writes the configuration to disk using `ConfigManager`,
+//! and triggers a callback to notify the main UI to refresh its data.
 
 use gtk::prelude::*;
 use gtk::{ApplicationWindow, Box, Button, ComboBoxText, Entry, Grid, HeaderBar, Label, Window};
@@ -11,7 +21,28 @@ use std::sync::{Arc, Mutex};
 
 use crate::config::{AppConfig, ConfigManager, WeatherApiProvider};
 
-/// Creates and shows the preferences window
+/// Creates and displays the modal preferences window.
+///
+/// This function constructs the entire preferences UI, including labels, text entries,
+/// and dropdowns for all configurable options. It populates the fields with the
+/// current values from the provided `AppConfig`. It connects signal handlers for the
+/// "Save" and "Cancel" buttons.
+///
+/// When the "Save" button is clicked, it reads the new values from the UI widgets,
+/// updates the shared `AppConfig` state, persists the changes to the configuration
+/// file via `ConfigManager`, and finally executes the `on_save` closure to trigger
+/// actions in the main UI, such as re-fetching weather data.
+///
+/// # Arguments
+///
+/// * `parent` - The parent `ApplicationWindow` to which this modal dialog is transient.
+/// * `config` - A thread-safe, shared pointer to the application's `AppConfig`.
+/// * `on_save` - A closure that is executed after the configuration is successfully saved.
+///   This is typically used to refresh the main application view.
+///
+/// # Type Parameters
+///
+/// * `F` - The type of the `on_save` closure, which must be a `Fn()` with a `'static` lifetime.
 pub fn show_preferences_window<F>(
     parent: &ApplicationWindow,
     config: Arc<Mutex<AppConfig>>,
