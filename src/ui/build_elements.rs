@@ -1,13 +1,13 @@
 use glib::Bytes;
 use gtk::Button;
-use gtk::Label;
 use gtk::gdk_pixbuf::Pixbuf;
 use gtk::gio;
 use gtk::gio::MemoryInputStream;
 use gtk::prelude::*;
 // Import necessary traits for GTK widgets
-use gtk::gio::{Menu, MenuItem};
-use gtk::{Image, Spinner}; // For glib::ExitCode and Image widget
+use super::UIWidgets;
+use gtk::Spinner;
+use gtk::gio::{Menu, MenuItem}; // For glib::ExitCode and Image widget
 
 use crate::weather_api::openweather_api;
 
@@ -54,6 +54,7 @@ pub fn build_main_menu() -> Menu {
     root_menu
 }
 
+#[allow(dead_code)]
 pub fn build_button(label: String) -> Button {
     // Create a button with a label
 
@@ -66,7 +67,7 @@ pub fn build_button(label: String) -> Button {
         .build()
 }
 
-fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
+pub fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
     match weather {
         openweather_api::WeatherSymbol::Clear => "animated/clear-day.svg",
         openweather_api::WeatherSymbol::Clouds => "animated/cloudy-2-day.svg",
@@ -90,10 +91,7 @@ fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static str {
 /// Updates the UI labels with the fetched weather data.
 pub fn update_ui_with_weather(
     weather_data: &openweather_api::ApiResponse,
-    symbol_image: &Image,
-    temp_label: &Label,
-    desc_label: &Label,
-    humidity_label: &Label,
+    widgets: &UIWidgets,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(weather) = weather_data.weather.first() {
         // Get the data like before
@@ -110,10 +108,14 @@ pub fn update_ui_with_weather(
         let pixbuf =
             Pixbuf::from_stream_at_scale(&stream, 256, 256, true, None::<&gio::Cancellable>)?;
         // Update labels with formatted data
-        symbol_image.set_from_pixbuf(Some(&pixbuf));
-        temp_label.set_text(&format!("{:.1}°C", weather_data.main.temp));
-        desc_label.set_text(&weather.description);
-        humidity_label.set_text(&format!("Humidity: {}%", weather_data.main.humidity));
+        widgets.weather_symbol_image.set_from_pixbuf(Some(&pixbuf));
+        widgets
+            .temp_label
+            .set_text(&format!("{:.1}°C", weather_data.main.temp));
+        widgets.description_label.set_text(&weather.description);
+        widgets
+            .humidity_label
+            .set_text(&format!("Humidity: {}%", weather_data.main.humidity));
     }
     Ok(())
 }

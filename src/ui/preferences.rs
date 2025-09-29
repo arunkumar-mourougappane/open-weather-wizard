@@ -12,7 +12,13 @@ use std::sync::{Arc, Mutex};
 use crate::config::{AppConfig, ConfigManager, WeatherApiProvider};
 
 /// Creates and shows the preferences window
-pub fn show_preferences_window(parent: &ApplicationWindow, config: Arc<Mutex<AppConfig>>) {
+pub fn show_preferences_window<F>(
+    parent: &ApplicationWindow,
+    config: Arc<Mutex<AppConfig>>,
+    on_save: F,
+) where
+    F: Fn() + 'static,
+{
     let window = Window::builder()
         .title("Preferences")
         .default_width(500)
@@ -199,6 +205,7 @@ pub fn show_preferences_window(parent: &ApplicationWindow, config: Arc<Mutex<App
                 // TODO: Show error dialog
             } else {
                 log::info!("Configuration saved successfully");
+                on_save();
             }
         }
 
