@@ -2,10 +2,6 @@
 
 Weather Wizard is a GTK4-based desktop weather application written in Rust. It fetches weather data from various providers and displays it in a simple and elegant user interface.
 
-## UI
-
-![Meteo Wizard](docs_meta_data/ApplicationUI_v0.1.png)
-
 ## Features
 
 - **Current Weather:** Displays the current temperature, a description of the weather, and humidity.
@@ -38,51 +34,50 @@ These instructions will get you a copy of the project up and running on your loc
 
   - **Ubuntu/Debian:**
 
-        ```bash
-        sudo apt-get install libgtk-4-dev
-        ```
+```bash
+sudo apt-get install libgtk-4-dev
+```
 
   - **Fedora:**
 
-        ```bash
-        sudo dnf install gtk4-devel
-        ```
+```bash
+sudo dnf install gtk4-devel
+```
 
   - **Arch Linux:**
 
-        ```bash
-        sudo pacman -S gtk4
-        ```
+```bash
+sudo pacman -S gtk4
+```
 
 ### Building
 
 1. Clone the repository:
 
-   ```bash
-   git clone https://github.com/arunkumar-mourougappane/meteo-wizard.git
-   cd meteo-wizard
-   ```
+```bash
+git clone https://github.com/arunkumar-mourougappane/meteo-wizard.git
+cd meteo-wizard
+```
 
-2. Download the weather icon assets:
+1. Download the weather icon assets:
 
-   ```bash
-   ./get_weather_icons.sh
-   ```
+```bash
+./get_weather_icons.sh
+```
 
+1. Build the project:
 
-2. Build the project:
-
-   ```bash
-   cargo build
-   ```
+```bash
+cargo build
+```
 
 ### Running
 
 To run the application, use the following command:
 
-   ```bash
-   cargo run
-   ```
+```bash
+cargo run
+```
 
 ## Configuration
 
