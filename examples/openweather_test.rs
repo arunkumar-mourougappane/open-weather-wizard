@@ -1,6 +1,20 @@
+//!
+//! This example demonstrates how to use the OpenWeather API provider to fetch
+//! real-time weather data. It initializes a configuration for London, UK,
+//! creates an `OpenWeather` provider with a hardcoded API key, and then
+//! attempts to fetch and display the current weather conditions.
+//!
+//! This serves as a live integration test to verify that the OpenWeather API
+//! implementation is working correctly.
+//!
 use open_wearther_wizard::config::{AppConfig, LocationConfig, WeatherApiProvider};
 use open_wearther_wizard::weather_api::weather_provider::WeatherProviderFactory;
 
+/// The main entry point for the OpenWeather API integration test.
+///
+/// This function sets up a test configuration, creates an OpenWeather provider,
+/// and fetches weather data for a predefined location. It prints the results
+/// to the console, indicating success or failure.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("OpenWeather API Integration Test");

@@ -1,13 +1,27 @@
+//! # Weather Wizard Library Crate
+//!
+//! This is the main library for the Weather Wizard application. It serves as the
+//! root of the crate, organizing the application's core logic into distinct modules.
+//!
+//! ## Modules
+//!
+//! - **`config`**: Handles loading, saving, and managing application configuration.
+//! - **`ui`**: Contains all logic for building and managing the GTK user interface.
+//! - **`weather_api`**: Provides an abstraction layer for fetching data from various
+//!   weather services.
+
 pub mod config;
 pub mod ui;
 pub mod weather_api;
 
+/// Contains integration and unit tests for the library.
 #[cfg(test)]
 mod tests {
     use crate::config::{AppConfig, LocationConfig, WeatherApiProvider};
     use crate::weather_api::weather_provider::WeatherProviderFactory;
     use base64::{Engine as _, engine::general_purpose::STANDARD};
 
+    /// Tests that the API token is correctly encoded to and decoded from base64.
     #[test]
     fn test_config_base64_encoding() {
         let mut config = AppConfig::default();
@@ -19,6 +33,7 @@ mod tests {
         assert_eq!(test_token, decoded_token);
     }
 
+    /// Verifies that the `AppConfig` struct can be serialized to and deserialized from JSON.
     #[test]
     fn test_config_serialization() {
         let config = AppConfig {
@@ -39,6 +54,9 @@ mod tests {
         assert_eq!(deserialized.location.city, "Test City");
     }
 
+    /// Tests the `WeatherProviderFactory`'s ability to create providers.
+    ///
+    /// This test covers both successful creation and error handling for missing API keys.
     #[test]
     fn test_weather_provider_factory() {
         // Test OpenWeather provider creation
@@ -59,6 +77,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    /// Verifies that the `AppConfig` can be safely shared and mutated across threads using `Arc<Mutex<>>`.
     #[test]
     fn test_arc_mutex_config_access() {
         use std::sync::{Arc, Mutex};
@@ -97,6 +116,7 @@ mod tests {
         }
     }
 
+    /// An asynchronous test to verify that the mock `GoogleWeatherProvider` works as expected.
     #[tokio::test]
     async fn test_google_weather_provider() {
         use crate::weather_api::google_weather_api::GoogleWeatherProvider;

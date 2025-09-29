@@ -19,6 +19,7 @@ tokio = { version = "1.47.1", features = ["full"] }
 base64 = "0.22.1"
 dirs = "5.0.1"
 async-trait = "0.1.89"
+anyhow = "1.0.100"
 
 [dev-dependencies]
 tokio-test = "0.4.3"

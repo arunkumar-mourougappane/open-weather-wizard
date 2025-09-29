@@ -1,39 +1,35 @@
-//! # Weather Wizard GTK Application
+//! # Weather Wizard Application Entry Point
 //!
-//! This file contains the main entry point and UI setup for the Weather Wizard application,
-//! built using GTK4 and Rust. The application demonstrates how to create a GTK application
-//! window, set up a menu bar, and add interactive widgets such as buttons and spinners.
+//! This is the main executable for the Weather Wizard GTK application.
 //!
-//! ## Modules and Functions
+//! Its primary responsibilities are:
+//! 1.  Initializing the logging framework (`env_logger`).
+//! 2.  Calling into the `ui` module to build the `gtk::Application`.
+//! 3.  Running the GTK application's main event loop.
 //!
-//! - Imports necessary GTK4 and GLib traits and types.
-//! - Uses custom UI builder functions from the `build_elements` module.
-//!
-//! ### `build_main_ui`
-//! Creates and configures the main GTK application, sets up the window, menu bar, and widgets.
-//!
-//! ### `main`
-//! Entry point of the application. Runs the GTK application and returns the exit code.
-//!
-//! ## Widgets
-//!
-//! - **Menu Bar:** Built using `PopoverMenuBar` and a custom menu model.
-//! - **Button:** Created with a custom builder function.
-//! - **Spinner:** Created and started to indicate loading or processing.
-//!
-//! ## Usage
-//!
-//! Run the application to launch the Weather Wizard UI window.
+//! All application logic, including UI construction, state management, and API
+//! calls, is handled within the `meteo_wizard` library crate, which is organized
+//! into the `config`, `ui`, and `weather_api` modules.
 use env_logger::{self, Builder};
 
 use gtk::prelude::*;
 use gtk::{Application, glib};
 use log::{self, LevelFilter}; // Import necessary traits for GTK widgets
 
+// These modules are part of the library crate, but are declared here to be
+// included in the binary build.
 mod config;
 mod ui;
 mod weather_api;
 
+/// The main entry point for the Weather Wizard application.
+///
+/// This function initializes the logger, builds the main UI, and runs the GTK application.
+/// It serves as the asynchronous entry point required by `tokio`.
+///
+/// # Returns
+///
+/// A `glib::ExitCode` indicating the application's exit status.
 #[tokio::main]
 async fn main() -> glib::ExitCode {
     Builder::new()
