@@ -3,7 +3,9 @@ name = "open-wearther-wizard"
 version = "0.1.0"
 edition = "2024"
 authors = ["Arunkumar Mourougappane <amouroug@buffalo.edu>"]
-
+description = "A simple and elegant weather application built with Rust and GTK 4."
+homepage = "https://github.com/arunkumar-mourougappane-path-robotics/meteo-wizard"
+license = "MIT"
 [dependencies]
 env_logger = "0.11.8"
 gtk = { version = "0.10.0", package = "gtk4" }
@@ -17,7 +19,7 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 tokio = { version = "1.47.1", features = ["full"] }
 base64 = "0.22.1"
-dirs = "5.0.1"
+dirs = "6.0.0"
 async-trait = "0.1.89"
 anyhow = "1.0.100"
 

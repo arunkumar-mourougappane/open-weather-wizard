@@ -22,7 +22,7 @@ use gtk::Spinner;
 use gtk::gio::{Menu, MenuItem}; // For glib::ExitCode and Image widget
 use rust_embed::RustEmbed;
 
-use crate::weather_api::openweather_api;
+use crate::{config::AppConfig, weather_api::openweather_api};
 
 pub const DEFAULT_WINDOW_WIDTH: i32 = 720;
 pub const DEFAULT_WINDOW_HEIGHT: i32 = 480;
@@ -148,6 +148,7 @@ pub fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static s
 /// # Arguments
 ///
 /// * `weather_data` - A reference to the `openweather_api::ApiResponse` containing the weather data.
+/// * `config` - A reference to the `AppConfig` to get location details.
 /// * `widgets` - A reference to the `UIWidgets` struct containing the UI elements to update.
 ///
 /// # Errors
@@ -155,6 +156,7 @@ pub fn get_weather_symbol(weather: openweather_api::WeatherSymbol) -> &'static s
 /// Returns an `anyhow::Error` if the icon asset cannot be found or if the SVG cannot be loaded into a `Pixbuf`.
 pub fn update_ui_with_weather(
     weather_data: &openweather_api::ApiResponse,
+    config: &AppConfig,
     widgets: &UIWidgets,
 ) -> Result<(), anyhow::Error> {
     if let Some(weather) = weather_data.weather.first() {
@@ -172,6 +174,13 @@ pub fn update_ui_with_weather(
         let pixbuf =
             Pixbuf::from_stream_at_scale(&stream, 256, 256, true, None::<&gio::Cancellable>)?;
         // Update labels with formatted data
+        let location_text = if !config.location.state.is_empty() {
+            format!("{}, {}", weather_data.name, config.location.state)
+        } else {
+            weather_data.name.clone()
+        };
+        widgets.location_label.set_text(&location_text);
+
         widgets.weather_symbol_image.set_from_pixbuf(Some(&pixbuf));
         widgets
             .temp_label

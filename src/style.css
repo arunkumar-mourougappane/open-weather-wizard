@@ -18,6 +18,15 @@
 }
 
 /*
+ * Style for the location label (e.g., "Peoria, IL").
+ * This makes the location prominent, but slightly less so than the temperature.
+ */
+.location-label {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+/*
  * Style for the main temperature label.
  * This class makes the temperature reading large and bold, making it the
  * most prominent piece of information in the UI.

@@ -17,6 +17,7 @@
 
 pub mod build_elements;
 pub mod preferences;
+pub mod about;
 
 use gtk::gio::MenuModel;
 use gtk::prelude::*;
@@ -29,6 +30,7 @@ use crate::ui::build_elements::{
     update_ui_with_weather,
 };
 use crate::ui::preferences::show_preferences_window;
+use crate::ui::about::show_about_dialog;
 use crate::weather_api::openweather_api::ApiError;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
 
@@ -38,6 +40,7 @@ use crate::weather_api::weather_provider::WeatherProviderFactory;
 /// weather information, allowing them to be easily passed between functions and closures.
 #[derive(Clone)]
 pub struct UIWidgets {
+    location_label: Label,
     temp_label: Label,
     description_label: Label,
     humidity_label: Label,
@@ -85,18 +88,18 @@ async fn fetch_weather_data(
     widgets: &UIWidgets,
     config: &Arc<Mutex<Config>>,
 ) -> Result<(), AppError> {
-    #[allow(clippy::await_holding_lock)]
     let current_config = config.lock().expect("Failed to lock config");
     let location_config = current_config.location.clone();
     let provider_type = current_config.weather_provider.clone();
     let api_token = current_config.get_api_token().ok();
+    let config_clone = current_config.clone();
     drop(current_config);
 
     let provider = WeatherProviderFactory::create_provider(&provider_type, api_token)
         .map_err(|e| AppError::Config(e.to_string()))?;
     let weather_data = provider.get_weather(&location_config).await?;
 
-    update_ui_with_weather(&weather_data, widgets)?;
+    update_ui_with_weather(&weather_data, &config_clone, widgets)?;
 
     Ok(())
 }
@@ -196,6 +199,7 @@ pub fn build_main_ui() -> Application {
         weather_symbol_image.set_pixel_size(128);
 
         // Labels for displaying weather data
+        let location_label = Label::new(None);
         let temp_label = Label::new(Some("--°C"));
         let description_label = Label::new(Some("Enter a city to begin"));
         let humidity_label = Label::new(Some("Humidity: --%"));
@@ -203,6 +207,7 @@ pub fn build_main_ui() -> Application {
         // Add CSS classes for styling
         // weather_symbol_image.add_css_class("weather-symbol");
         description_label.add_css_class("weather-description");
+        location_label.add_css_class("location-label");
         temp_label.add_css_class("weather-temp");
         humidity_label.add_css_class("weather-humidity");
 
@@ -212,6 +217,7 @@ pub fn build_main_ui() -> Application {
         vbox.append(&spinner);
 
         let widgets = UIWidgets {
+            location_label,
             temp_label,
             description_label,
             humidity_label,
@@ -230,6 +236,7 @@ pub fn build_main_ui() -> Application {
             .build();
 
         main_box.append(&widgets.weather_symbol_image);
+        main_box.append(&widgets.location_label);
         main_box.append(&widgets.temp_label);
         main_box.append(&widgets.description_label);
         main_box.append(&widgets.humidity_label);
@@ -249,6 +256,13 @@ pub fn build_main_ui() -> Application {
             });
         });
         app.add_action(&preferences_action);
+
+        let about_action = gio::SimpleAction::new("about", None);
+        let window_clone = window.clone();
+        about_action.connect_activate(move |_, _| {
+            show_about_dialog(&window_clone);
+        });
+        app.add_action(&about_action);
 
         let quit_action = gio::SimpleAction::new("quit", None);
         let app_clone = app.clone();
