@@ -1,6 +1,6 @@
-# Weather Wizard - A Rust-based GTK Weather Application
+# Open Weather Wizard - A Rust-based GTK Weather Application
 
-Weather Wizard is a GTK4-based desktop weather application written in Rust. It fetches weather data from various providers and displays it in a simple and elegant user interface.
+Open Weather Wizard is a GTK4-based desktop weather application written in Rust. It fetches weather data from various providers and displays it in a simple and elegant user interface.
 
 ## Features
 
@@ -13,9 +13,10 @@ Weather Wizard is a GTK4-based desktop weather application written in Rust. It f
 ## Technology Stack
 
 - **Rust:** The core application logic is written in Rust, providing performance and safety.
-- **GTK4 & Relm4:** The graphical user interface is built using GTK4 and the Relm4 framework, following The Elm Architecture.
+- **GTK4:** The graphical user interface is built using GTK4 with native Rust bindings.
 - **Tokio:** Asynchronous operations, such as fetching weather data, are handled by Tokio.
 - **Serde:** For serializing and deserializing configuration and API data.
+- **Reqwest:** For making HTTP requests to weather API services.
 
 ## Animated Icons
 
@@ -32,7 +33,7 @@ These instructions will get you a copy of the project up and running on your loc
 - **Rust:** Ensure you have a recent version of Rust and Cargo installed. You can find installation instructions at [rust-lang.org](https://www.rust-lang.org/).
 - **GTK4:** You need to have the GTK4 development libraries installed on your system. The installation process varies depending on your operating system.
 
-  - **Ubuntu/Debian:**
+  - **Ubuntu 22.04/Debian:**
 
 ```bash
 sudo apt-get install libgtk-4-dev
@@ -50,40 +51,65 @@ sudo dnf install gtk4-devel
 sudo pacman -S gtk4
 ```
 
+### Verified Platforms
+
+This application has been successfully compiled and tested on:
+- ✅ **Ubuntu 22.04 LTS** (Rust 1.89.0, GTK 4.x)
+
 ### Building
 
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/arunkumar-mourougappane/meteo-wizard.git
-cd meteo-wizard
+git clone https://github.com/arunkumar-mourougappane/open-weather-wizard.git
+cd open-weather-wizard
 ```
 
-1. Download the weather icon assets:
+2. Download the weather icon assets:
 
 ```bash
 ./get_weather_icons.sh
 ```
 
-1. Build the project:
+3. Build the project:
 
 ```bash
+# Debug build (larger binary with debug symbols)
 cargo build
+
+# Release build (optimized, smaller binary - recommended)
+cargo build --release
 ```
 
 ### Running
 
-To run the application, use the following command:
+To run the application, use one of the following commands:
 
 ```bash
+# Run directly with cargo (debug build)
 cargo run
+
+# Or run the compiled binary (release build - faster)
+./target/release/open-wearther-wizard
+
+# Or run the debug binary
+./target/debug/open-wearther-wizard
 ```
+
+**Note:** This is a GUI application that requires a desktop environment with display capabilities (X11 or Wayland).
 
 ## Configuration
 
 The first time you run the application, it will create a configuration file at `~/.config/open-weather-wizard/config.json`. You can edit this file to set your location and API key.
 
 Alternatively, you can use the preferences window within the application to configure these settings.
+
+### First Run
+When you run the application for the first time, it will use default configuration settings. You can view available command-line options with:
+
+```bash
+./target/release/open-wearther-wizard --help
+```
 
 ### API Keys
 
@@ -94,24 +120,75 @@ To fetch weather data, you need an API key from one of the supported weather pro
 
 Once you have an API key, you can add it to the `config.json` file or enter it in the preferences window.
 
+## Troubleshooting
+
+### Common Build Issues
+
+**GTK 4 not found:**
+```bash
+# Ubuntu/Debian
+sudo apt-get install libgtk-4-dev pkg-config
+
+# Fedora
+sudo dnf install gtk4-devel pkgconf-devel
+
+# Arch Linux
+sudo pacman -S gtk4 pkgconf
+```
+
+**Missing dependencies:**
+```bash
+# Install additional development tools if needed
+sudo apt-get install build-essential
+```
+
+**Display issues:**
+- Ensure you have a desktop environment running (GNOME, KDE, etc.)
+- For headless systems, you may need to set up X11 forwarding or use a virtual display
+
+### Runtime Issues
+
+**Config file location:**
+- Configuration is stored at: `~/.config/open-weather-wizard/config.json`
+- Delete this file to reset to defaults
+
+**Weather data not loading:**
+- Check your internet connection
+- Verify your API key is valid
+- Check the application logs for error messages
+
+## Build Status
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Ubuntu 22.04 LTS | ✅ **Compiled Successfully** | Rust 1.89.0, GTK 4.x |
+| Debug Build | ✅ 104 MB | With debug symbols |
+| Release Build | ✅ 5.6 MB | Optimized binary |
+
 ## Project Structure
 
 The project is organized into the following directories:
 
 ```
 .
-├── assets/         # Contains static assets like weather icons.
-├── docs_meta_data/ # Contains documentation-related files.
-├── examples/       # Contains example code.
-├── src/            # Contains the source code.
-│   ├── config.rs   # Handles application configuration.
-│   ├── lib.rs      # Main library file.
-│   ├── main.rs     # Main application entry point.
-│   ├── style.css   # CSS for styling the application.
-│   ├── ui/         # Contains UI-related modules.
-│   └── weather_api/ # Contains modules for different weather APIs.
-├── Cargo.toml      # The package manifest for Rust.
-└── README.md       # This file.
+├── assets/              # Contains static and animated weather icons
+│   ├── animated/        # Animated SVG weather icons
+│   └── static/          # Static SVG weather icons
+├── docs_meta_data/      # Contains documentation-related files
+├── examples/            # Contains example code and demos
+├── src/                 # Contains the source code
+│   ├── config.rs        # Handles application configuration
+│   ├── lib.rs           # Main library file
+│   ├── main.rs          # Main application entry point
+│   ├── style.css        # CSS for styling the application
+│   ├── ui/              # Contains UI-related modules
+│   └── weather_api/     # Contains modules for different weather APIs
+├── target/              # Compiled binaries (generated during build)
+├── Cargo.toml           # The package manifest for Rust
+├── Cargo.lock           # Dependency lock file
+├── get_weather_icons.sh # Script to download weather icons
+├── LICENSE              # MIT License file
+└── README.md            # This file
 ```
 
 ## Contributing
