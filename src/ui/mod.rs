@@ -15,9 +15,9 @@
 //! - **Event Handling**: Connecting signals for menu actions (like "Preferences" and "Quit")
 //!   and setting up a periodic timer for automatic weather updates.
 
+pub mod about;
 pub mod build_elements;
 pub mod preferences;
-pub mod about;
 
 use gtk::gio::MenuModel;
 use gtk::prelude::*;
@@ -25,12 +25,12 @@ use gtk::{Application, ApplicationWindow, Image, Label, PopoverMenuBar, gio, gli
 use std::sync::{Arc, Mutex};
 
 use crate::config::{AppConfig as Config, ConfigManager};
+use crate::ui::about::show_about_dialog;
 use crate::ui::build_elements::{
     DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, build_main_menu, build_spinner,
     update_ui_with_weather,
 };
 use crate::ui::preferences::show_preferences_window;
-use crate::ui::about::show_about_dialog;
 use crate::weather_api::openweather_api::ApiError;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
 

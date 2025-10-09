@@ -1,4 +1,3 @@
-
 //! # About Dialog Module
 //!
 //! This module provides a function to create and display the application's "About"
