@@ -48,14 +48,14 @@ For complete technical details, see [docs_meta_data/ANIMATED_ICONS.md](docs_meta
 The easiest way to install Meteo Wizard is using the provided installation script that handles both binary installation and desktop integration:
 
 ```bash
-git clone https://github.com/amouroug/meteo-wizard.git
-cd meteo-wizard
+git clone https://github.com/arunkumar-mourougappane/open-weather-wizard.git
+cd open-weather-wizard
 ./install.sh
 ```
 
 This script will:
 
-- Install the `meteo-wizard` binary using cargo
+- Install the `open-weather-wizard` binary using cargo
 - Set up desktop integration (application menu entry, icons)
 - Create an uninstall script for easy removal
 
@@ -71,12 +71,12 @@ To install just the binary without desktop integration:
 
 ```bash
 # From source
-git clone https://github.com/amouroug/meteo-wizard.git
-cd meteo-wizard
+git clone https://github.com/arunkumar-mourougappane/open-weather-wizard.git
+cd open-weather-wizard
 cargo install --path .
 
 # Or when published to crates.io (future)
-cargo install meteo-wizard
+cargo install open-weather-wizard
 ```
 
 #### From Source (Development)
@@ -84,8 +84,8 @@ cargo install meteo-wizard
 To run from source without installing:
 
 ```bash
-git clone https://github.com/amouroug/meteo-wizard.git
-cd meteo-wizard
+git clone https://github.com/arunkumar-mourougappane/open-weather-wizard.git
+cd open-weather-wizard
 cargo run
 ```
 
@@ -94,18 +94,18 @@ cargo run
 If you used the installation script, you can easily uninstall:
 
 ```bash
-meteo-wizard-uninstall
+open-weather-wizard-uninstall
 ```
 
 For manual installation:
 
 ```bash
 # Remove binary
-cargo uninstall meteo-wizard
+cargo uninstall open-weather-wizard
 
 # Remove desktop integration (if manually added)
-rm -f ~/.local/share/applications/meteo-wizard.desktop
-rm -f ~/.local/share/icons/hicolor/*/apps/meteo-wizard.*
+rm -f ~/.local/share/applications/open-weather-wizard.desktop
+rm -f ~/.local/share/icons/hicolor/*/apps/open-weather-wizard.*
 
 # Remove configuration (optional)
 rm -rf ~/.config/open-weather-wizard/
@@ -213,7 +213,7 @@ The project is organized into the following directories:
 ├── Cargo.lock           # Dependency lock file
 ├── get_weather_icons.sh # Script to download weather icons
 ├── install.sh           # Installation script with desktop integration
-├── meteo-wizard.desktop # Linux desktop entry file
+├── open-weather-wizard.desktop # Linux desktop entry file
 ├── LICENSE              # MIT License file
 └── README.md            # This file
 ```
