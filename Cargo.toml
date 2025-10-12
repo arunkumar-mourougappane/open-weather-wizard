@@ -1,5 +1,5 @@
 [package]
-name = "open-wearther-wizard"
+name = "open-weather-wizard"
 version = "0.1.0"
 edition = "2024"
 authors = ["Arunkumar Mourougappane <amouroug@buffalo.edu>"]
@@ -24,7 +24,7 @@ async-trait = "0.1.89"
 anyhow = "1.0.100"
 
 [[bin]]
-name = "meteo-wizard"
+name = "open-weather-wizard"
 path = "src/main.rs"
 
 [dev-dependencies]

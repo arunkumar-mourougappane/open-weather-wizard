@@ -1,5 +1,5 @@
 //!
-//! This example serves as a comprehensive demonstration of the `meteo-wizard`
+//! This example serves as a comprehensive demonstration of the `open-weather-wizard`
 //! library's core functionalities. It is a command-line program that walks
 //! through several key features to verify their behavior.
 //!

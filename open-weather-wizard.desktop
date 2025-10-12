@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Meteo Wizard
+Name=Open Weather Wizard
 Comment=A simple and elegant desktop weather application
 Comment[fr]=Une application météo de bureau simple et élégante
 Comment[es]=Una aplicación meteorológica de escritorio simple y elegante
@@ -10,8 +10,8 @@ GenericName=Weather Application
 GenericName[fr]=Application Météo
 GenericName[es]=Aplicación del Tiempo
 GenericName[de]=Wetter-Anwendung
-Exec=meteo-wizard
-Icon=meteo-wizard
+Exec=open-weather-wizard
+Icon=open-weather-wizard
 Terminal=false
 StartupNotify=true
 Categories=Utility;Education;Science;Geography;
@@ -20,4 +20,4 @@ Keywords[fr]=météo;prévisions;température;humidité;vent;pluie;neige;climat;
 Keywords[es]=tiempo;pronóstico;temperatura;humedad;viento;lluvia;nieve;clima;
 Keywords[de]=Wetter;Vorhersage;Temperatur;Feuchtigkeit;Wind;Regen;Schnee;Klima;
 MimeType=
-StartupWMClass=meteo-wizard
+StartupWMClass=open-weather-wizard

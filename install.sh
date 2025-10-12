@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Meteo Wizard Installation Script
-# This script installs the meteo-wizard binary and sets up desktop integration
+# Open Weather Wizard Installation Script
+# This script installs the open-weather-wizard binary and sets up desktop integration
 
 set -e
 
@@ -41,14 +41,14 @@ check_cargo() {
 
 # Install the binary
 install_binary() {
-    print_status "Installing meteo-wizard binary..."
+    print_status "Installing open-weather-wizard binary..."
     
     if [ -d ".git" ]; then
         # Installing from source directory
         cargo install --path . --force
     else
         # Installing from crates.io (if published)
-        cargo install meteo-wizard --force
+        cargo install open-weather-wizard --force
     fi
     
     print_success "Binary installed successfully!"
@@ -64,8 +64,8 @@ setup_desktop_integration() {
     mkdir -p ~/.local/share/icons/hicolor/scalable/apps
     
     # Copy desktop file
-    if [ -f "meteo-wizard.desktop" ]; then
-        cp meteo-wizard.desktop ~/.local/share/applications/
+    if [ -f "open-weather-wizard.desktop" ]; then
+        cp open-weather-wizard.desktop ~/.local/share/applications/
         print_success "Desktop entry installed"
     else
         print_warning "Desktop file not found, skipping desktop integration"
@@ -74,7 +74,7 @@ setup_desktop_integration() {
     
     # Copy icon files
     if [ -f "assets/icon/icon.png" ]; then
-        cp assets/icon/icon.png ~/.local/share/icons/hicolor/256x256/apps/meteo-wizard.png
+        cp assets/icon/icon.png ~/.local/share/icons/hicolor/256x256/apps/open-weather-wizard.png
         print_success "PNG icon installed"
     else
         print_warning "PNG icon not found at assets/icon/icon.png"
@@ -82,10 +82,10 @@ setup_desktop_integration() {
     
     # Create SVG icon from assets if available
     if [ -f "assets/animated/clear-day.svg" ]; then
-        cp assets/animated/clear-day.svg ~/.local/share/icons/hicolor/scalable/apps/meteo-wizard.svg
+        cp assets/animated/clear-day.svg ~/.local/share/icons/hicolor/scalable/apps/open-weather-wizard.svg
         print_success "SVG icon installed"
     elif [ -f "assets/static/clear-day.svg" ]; then
-        cp assets/static/clear-day.svg ~/.local/share/icons/hicolor/scalable/apps/meteo-wizard.svg
+        cp assets/static/clear-day.svg ~/.local/share/icons/hicolor/scalable/apps/open-weather-wizard.svg
         print_success "SVG icon installed (from static)"
     else
         print_warning "No SVG icon found in assets"
@@ -108,10 +108,10 @@ setup_desktop_integration() {
 create_uninstall_script() {
     print_status "Creating uninstall script..."
     
-    cat > ~/.local/bin/meteo-wizard-uninstall << 'EOF'
+    cat > ~/.local/bin/open-weather-wizard-uninstall << 'EOF'
 #!/bin/bash
 
-# Meteo Wizard Uninstall Script
+# Open Weather Wizard Uninstall Script
 
 set -e
 
@@ -129,16 +129,16 @@ print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }
 
-print_status "Uninstalling meteo-wizard..."
+print_status "Uninstalling open-weather-wizard..."
 
 # Remove binary
-cargo uninstall meteo-wizard 2>/dev/null || true
+cargo uninstall open-weather-wizard 2>/dev/null || true
 print_success "Binary removed"
 
 # Remove desktop integration
-rm -f ~/.local/share/applications/meteo-wizard.desktop
-rm -f ~/.local/share/icons/hicolor/256x256/apps/meteo-wizard.png
-rm -f ~/.local/share/icons/hicolor/scalable/apps/meteo-wizard.svg
+rm -f ~/.local/share/applications/open-weather-wizard.desktop
+rm -f ~/.local/share/icons/hicolor/256x256/apps/open-weather-wizard.png
+rm -f ~/.local/share/icons/hicolor/scalable/apps/open-weather-wizard.svg
 
 # Update caches
 if command -v update-desktop-database &> /dev/null; then
@@ -160,20 +160,20 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_success "Configuration files removed"
 fi
 
-print_success "Meteo Wizard uninstalled successfully!"
+print_success "Open Weather Wizard uninstalled successfully!"
 
 # Remove this uninstall script
-rm -f ~/.local/bin/meteo-wizard-uninstall
+rm -f ~/.local/bin/open-weather-wizard-uninstall
 EOF
 
-    chmod +x ~/.local/bin/meteo-wizard-uninstall
-    print_success "Uninstall script created at ~/.local/bin/meteo-wizard-uninstall"
+    chmod +x ~/.local/bin/open-weather-wizard-uninstall
+    print_success "Uninstall script created at ~/.local/bin/open-weather-wizard-uninstall"
 }
 
 # Main installation process
 main() {
     echo
-    print_status "🌤️  Meteo Wizard Installation Script"
+    print_status "🌤️  Open Weather Wizard Installation Script"
     echo
     
     check_cargo
@@ -185,9 +185,9 @@ main() {
     print_success "🎉 Installation completed successfully!"
     echo
     echo "You can now:"
-    echo "  • Run 'meteo-wizard' from the command line"
-    echo "  • Find 'Meteo Wizard' in your application menu"
-    echo "  • Uninstall with 'meteo-wizard-uninstall'"
+    echo "  • Run 'open-weather-wizard' from the command line"
+    echo "  • Find 'Open Weather Wizard' in your application menu"
+    echo "  • Uninstall with 'open-weather-wizard-uninstall'"
     echo
     echo "Note: You may need to log out and back in for the desktop icon to appear."
     echo
@@ -195,12 +195,12 @@ main() {
 
 # Check for help flag
 if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    echo "Meteo Wizard Installation Script"
+    echo "Open Weather Wizard Installation Script"
     echo
     echo "Usage: $0 [OPTIONS]"
     echo
     echo "This script will:"
-    echo "  1. Install the meteo-wizard binary using cargo"
+    echo "  1. Install the open-weather-wizard binary using cargo"
     echo "  2. Set up desktop integration (icons, .desktop file)"
     echo "  3. Create an uninstall script"
     echo
