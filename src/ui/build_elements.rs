@@ -195,10 +195,12 @@ pub fn update_ui_with_weather(
 
 /// Load an embedded asset into a Pixbuf. Useful for icons (for example, `assets/icon/icon.png`).
 pub fn load_embedded_pixbuf(asset_path: &str, size: i32) -> Result<Pixbuf, anyhow::Error> {
-    let embedded_file = WeatherIconsAsset::get(asset_path).ok_or_else(|| anyhow::anyhow!("Asset not found"))?;
+    let embedded_file =
+        WeatherIconsAsset::get(asset_path).ok_or_else(|| anyhow::anyhow!("Asset not found"))?;
     let svg_data = embedded_file.data.as_ref();
     let bytes = Bytes::from(svg_data);
     let stream: MemoryInputStream = MemoryInputStream::from_bytes(&bytes);
-    let pixbuf = Pixbuf::from_stream_at_scale(&stream, size, size, true, None::<&gio::Cancellable>)?;
+    let pixbuf =
+        Pixbuf::from_stream_at_scale(&stream, size, size, true, None::<&gio::Cancellable>)?;
     Ok(pixbuf)
 }
