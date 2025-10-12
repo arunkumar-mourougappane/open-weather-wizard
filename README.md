@@ -1,14 +1,16 @@
 # Open Weather Wizard - A Rust-based GTK Weather Application
 
-Open Weather Wizard is a GTK4-based desktop weather application written in Rust. It fetches weather data from various providers and displays it in a simple and elegant user interface.
+Open Weather Wizard is a simple and elegant desktop weather application written in Rust and GTK 4. It provides current weather, forecasts, and animated weather icons packaged with the app. Designed to be lightweight, extensible, and easy to localize or re-skin for different platforms and icon sets.
 
 ## Features
 
-- **Current Weather:** Displays the current temperature, a description of the weather, and humidity.
-- **Weather Icons:** Shows animated weather icons that correspond to the current weather conditions.
-- **Multiple Providers:** Supports multiple weather data providers, including OpenWeatherMap and Google Weather.
-- **Auto-Refresh:** Automatically updates the weather data at regular intervals.
-- **Configuration:** Allows users to configure their location and select their preferred weather provider through a preferences window.
+- **Current Weather:** Displays the current temperature, weather description, and humidity with real-time updates
+- **Animated Weather Icons:** Shows beautiful animated SVG weather icons with smooth animations for rain, snow, sun, clouds, and more weather conditions
+- **App Icons:** Features custom app icons in the About dialog and window titlebar for professional appearance
+- **Multiple Providers:** Supports multiple weather data providers, including OpenWeatherMap and Google Weather
+- **Auto-Refresh:** Automatically updates the weather data at configurable intervals (default: 30 seconds)
+- **Preferences:** Configure location, weather provider, and API keys through an intuitive preferences window
+- **Embedded Assets:** All weather icons and app icons are bundled with the application for offline operation
 
 ## Technology Stack
 
@@ -20,83 +22,95 @@ Open Weather Wizard is a GTK4-based desktop weather application written in Rust.
 
 ## Animated Icons
 
-The application uses a beautiful set of animated SVG weather icons provided by [amCharts](https://www.amcharts.com/free-animated-svg-weather-icons/) and sourced from the [Makin-Things/weather-icons](https://github.com/Makin-Things/weather-icons) repository. These icons provide dynamic animations for various weather conditions like rain, sun, clouds, and snow.
+The application features beautiful animated SVG weather icons provided by [amCharts](https://www.amcharts.com/free-animated-svg-weather-icons/) and sourced from the [Makin-Things/weather-icons](https://github.com/Makin-Things/weather-icons) repository. These icons provide smooth, dynamic animations for various weather conditions:
 
-For more details on the icon integration, see [docs_meta_data/ANIMATED_ICONS.md](docs_meta_data/ANIMATED_ICONS.md).
+- **Rain:** Animated falling raindrops with realistic motion
+- **Snow:** Gentle falling snowflakes with varying speeds
+- **Sun:** Rotating sun with shimmering ray effects
+- **Clouds:** Moving cloud formations with subtle animations
+- **Thunderstorms:** Flickering lightning effects and storm activity
+- **Wind:** Swirling wind patterns and motion effects
 
-## Getting Started
+### Animation Technology
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
+The app uses GTK4's native SVG rendering capabilities through librsvg to display animated SVGs. Weather icons are:
 
-### Prerequisites
+- Embedded as assets at compile-time for offline operation
+- Written to temporary files at runtime to enable animation playbook
+- Rendered using the system's librsvg library which supports CSS animations and SMIL
 
-- **Rust:** Ensure you have a recent version of Rust and Cargo installed. You can find installation instructions at [rust-lang.org](https://www.rust-lang.org/).
-- **GTK4:** You need to have the GTK4 development libraries installed on your system. The installation process varies depending on your operating system.
+For complete technical details, see [docs_meta_data/ANIMATED_ICONS.md](docs_meta_data/ANIMATED_ICONS.md).
 
-  - **Ubuntu 22.04/Debian:**
+## Installation
+
+### Quick Install (Recommended)
+
+The easiest way to install Meteo Wizard is using the provided installation script that handles both binary installation and desktop integration:
 
 ```bash
-sudo apt-get install libgtk-4-dev
+git clone https://github.com/amouroug/meteo-wizard.git
+cd meteo-wizard
+./install.sh
 ```
 
-  - **Fedora:**
+This script will:
+
+- Install the `meteo-wizard` binary using cargo
+- Set up desktop integration (application menu entry, icons)
+- Create an uninstall script for easy removal
+
+### Manual Installation
+
+#### Prerequisites
+
+You need Rust installed on your system. If you don't have Rust installed, you can download it from [the official Rust installation guide](https://rustup.rs/).
+
+#### Install Binary Only
+
+To install just the binary without desktop integration:
 
 ```bash
-sudo dnf install gtk4-devel
+# From source
+git clone https://github.com/amouroug/meteo-wizard.git
+cd meteo-wizard
+cargo install --path .
+
+# Or when published to crates.io (future)
+cargo install meteo-wizard
 ```
 
-  - **Arch Linux:**
+#### From Source (Development)
+
+To run from source without installing:
 
 ```bash
-sudo pacman -S gtk4
-```
-
-### Verified Platforms
-
-This application has been successfully compiled and tested on:
-- ✅ **Ubuntu 22.04 LTS** (Rust 1.89.0, GTK 4.x)
-
-### Building
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/arunkumar-mourougappane/open-weather-wizard.git
-cd open-weather-wizard
-```
-
-2. Download the weather icon assets:
-
-```bash
-./get_weather_icons.sh
-```
-
-3. Build the project:
-
-```bash
-# Debug build (larger binary with debug symbols)
-cargo build
-
-# Release build (optimized, smaller binary - recommended)
-cargo build --release
-```
-
-### Running
-
-To run the application, use one of the following commands:
-
-```bash
-# Run directly with cargo (debug build)
+git clone https://github.com/amouroug/meteo-wizard.git
+cd meteo-wizard
 cargo run
-
-# Or run the compiled binary (release build - faster)
-./target/release/open-wearther-wizard
-
-# Or run the debug binary
-./target/debug/open-wearther-wizard
 ```
 
-**Note:** This is a GUI application that requires a desktop environment with display capabilities (X11 or Wayland).
+### Uninstallation
+
+If you used the installation script, you can easily uninstall:
+
+```bash
+meteo-wizard-uninstall
+```
+
+For manual installation:
+
+```bash
+# Remove binary
+cargo uninstall meteo-wizard
+
+# Remove desktop integration (if manually added)
+rm -f ~/.local/share/applications/meteo-wizard.desktop
+rm -f ~/.local/share/icons/hicolor/*/apps/meteo-wizard.*
+
+# Remove configuration (optional)
+rm -rf ~/.config/open-weather-wizard/
+rm -rf ~/.cache/open-weather-wizard/
+```
 
 ## Configuration
 
@@ -105,6 +119,7 @@ The first time you run the application, it will create a configuration file at `
 Alternatively, you can use the preferences window within the application to configure these settings.
 
 ### First Run
+
 When you run the application for the first time, it will use default configuration settings. You can view available command-line options with:
 
 ```bash
@@ -125,6 +140,7 @@ Once you have an API key, you can add it to the `config.json` file or enter it i
 ### Common Build Issues
 
 **GTK 4 not found:**
+
 ```bash
 # Ubuntu/Debian
 sudo apt-get install libgtk-4-dev pkg-config
@@ -137,22 +153,26 @@ sudo pacman -S gtk4 pkgconf
 ```
 
 **Missing dependencies:**
+
 ```bash
 # Install additional development tools if needed
 sudo apt-get install build-essential
 ```
 
 **Display issues:**
+
 - Ensure you have a desktop environment running (GNOME, KDE, etc.)
 - For headless systems, you may need to set up X11 forwarding or use a virtual display
 
 ### Runtime Issues
 
 **Config file location:**
+
 - Configuration is stored at: `~/.config/open-weather-wizard/config.json`
 - Delete this file to reset to defaults
 
 **Weather data not loading:**
+
 - Check your internet connection
 - Verify your API key is valid
 - Check the application logs for error messages
@@ -169,11 +189,12 @@ sudo apt-get install build-essential
 
 The project is organized into the following directories:
 
-```
+```text
 .
-├── assets/              # Contains static and animated weather icons
-│   ├── animated/        # Animated SVG weather icons
-│   └── static/          # Static SVG weather icons
+├── assets/              # Contains static and animated weather icons + app icon
+│   ├── animated/        # Animated SVG weather icons (used by app)
+│   ├── static/          # Static SVG weather icons (fallback)
+│   └── icon/            # App icons (PNG format for About dialog and titlebar)
 ├── docs_meta_data/      # Contains documentation-related files
 ├── examples/            # Contains example code and demos
 ├── src/                 # Contains the source code
@@ -182,11 +203,17 @@ The project is organized into the following directories:
 │   ├── main.rs          # Main application entry point
 │   ├── style.css        # CSS for styling the application
 │   ├── ui/              # Contains UI-related modules
+│   │   ├── about.rs     # About dialog with app icon
+│   │   ├── build_elements.rs # UI helpers and animated icon loading
+│   │   ├── mod.rs       # Main UI setup with titlebar icon
+│   │   └── preferences.rs # Settings/preferences window
 │   └── weather_api/     # Contains modules for different weather APIs
 ├── target/              # Compiled binaries (generated during build)
-├── Cargo.toml           # The package manifest for Rust
+├── Cargo.toml           # The package manifest for Rust (includes [[bin]] section)
 ├── Cargo.lock           # Dependency lock file
 ├── get_weather_icons.sh # Script to download weather icons
+├── install.sh           # Installation script with desktop integration
+├── meteo-wizard.desktop # Linux desktop entry file
 ├── LICENSE              # MIT License file
 └── README.md            # This file
 ```
