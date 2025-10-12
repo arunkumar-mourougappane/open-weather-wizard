@@ -1,10 +1,10 @@
 [package]
-name = "open-wearther-wizard"
+name = "open-weather-wizard"
 version = "0.1.0"
 edition = "2024"
 authors = ["Arunkumar Mourougappane <amouroug@buffalo.edu>"]
-description = "A simple and elegant weather application built with Rust and GTK 4."
-homepage = "https://github.com/arunkumar-mourougappane-path-robotics/meteo-wizard"
+description = "A simple and elegant desktop weather application written in Rust and GTK 4.\nProvides current weather, forecasts, and animated weather icons packaged with the app.\nDesigned to be lightweight, extensible, and easy to localize or re-skin for different platforms and icon sets."
+homepage = "https://github.com/arunkumar-mourougappane/open-weather-wizard"
 license = "MIT"
 [dependencies]
 env_logger = "0.11.8"
@@ -22,6 +22,10 @@ base64 = "0.22.1"
 dirs = "6.0.0"
 async-trait = "0.1.89"
 anyhow = "1.0.100"
+
+[[bin]]
+name = "open-weather-wizard"
+path = "src/main.rs"
 
 [dev-dependencies]
 tokio-test = "0.4.3"
