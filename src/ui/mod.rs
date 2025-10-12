@@ -178,6 +178,15 @@ pub fn build_main_ui() -> Application {
             .default_height(DEFAULT_WINDOW_HEIGHT)
             .build();
 
+        // Try to load the bundled icon and set it in a custom titlebar so it appears as a favicon.
+        if let Ok(pixbuf) = crate::ui::build_elements::load_embedded_pixbuf("icon/icon.png", 16) {
+            let icon_image = Image::from_pixbuf(Some(&pixbuf));
+            icon_image.set_pixel_size(16);
+            let header = gtk::HeaderBar::new();
+            header.pack_start(&icon_image);
+            window.set_titlebar(Some(&header));
+        }
+
         // Create root menu and add submenus
         let root_menu = build_main_menu();
 
