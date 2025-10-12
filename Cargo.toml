@@ -23,5 +23,9 @@ dirs = "6.0.0"
 async-trait = "0.1.89"
 anyhow = "1.0.100"
 
+[[bin]]
+name = "meteo-wizard"
+path = "src/main.rs"
+
 [dev-dependencies]
 tokio-test = "0.4.3"

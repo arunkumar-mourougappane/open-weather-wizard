@@ -1,0 +1,23 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Meteo Wizard
+Comment=A simple and elegant desktop weather application
+Comment[fr]=Une application météo de bureau simple et élégante
+Comment[es]=Una aplicación meteorológica de escritorio simple y elegante
+Comment[de]=Eine einfache und elegante Desktop-Wetter-Anwendung
+GenericName=Weather Application
+GenericName[fr]=Application Météo
+GenericName[es]=Aplicación del Tiempo
+GenericName[de]=Wetter-Anwendung
+Exec=meteo-wizard
+Icon=meteo-wizard
+Terminal=false
+StartupNotify=true
+Categories=Utility;Education;Science;Geography;
+Keywords=weather;forecast;temperature;humidity;wind;rain;snow;climate;
+Keywords[fr]=météo;prévisions;température;humidité;vent;pluie;neige;climat;
+Keywords[es]=tiempo;pronóstico;temperatura;humedad;viento;lluvia;nieve;clima;
+Keywords[de]=Wetter;Vorhersage;Temperatur;Feuchtigkeit;Wind;Regen;Schnee;Klima;
+MimeType=
+StartupWMClass=meteo-wizard

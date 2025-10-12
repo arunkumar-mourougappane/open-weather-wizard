@@ -5,6 +5,7 @@ This document describes the integration of animated weather icons from the [Maki
 ## Features
 
 ### Animated Icon Set
+
 The application now uses 52+ animated SVG weather icons that provide visual animations for different weather conditions:
 
 - **Sun animations**: Rotating sun with shiny ray effects
@@ -35,6 +36,7 @@ The application now supports comprehensive weather condition mapping:
 ### Day/Night Variations
 
 The icon set includes both day and night variations for many weather conditions:
+
 - `clear-day.svg` vs `clear-night.svg`
 - `cloudy-1-day.svg` vs `cloudy-1-night.svg`
 - `rainy-1-day.svg` vs `rainy-1-night.svg`
@@ -43,19 +45,30 @@ The icon set includes both day and night variations for many weather conditions:
 
 ## Technical Implementation
 
-### Icon Loading
+### Icon Loading and Animation
+
+**Embedding System:**
+
 - Icons are embedded at compile-time using the `rust-embed` crate
 - SVG files are loaded as embedded assets from the `assets/animated/` directory
-- Icons are converted to `Pixbuf` format for display in GTK4
+
+**Animation Rendering:**
+
+- Animated SVGs are written to temporary cache files to enable animation playbook
+- GTK4's native SVG animation support is utilized via `Image::set_from_file()`
+- Cache directory: `~/.cache/open-weather-wizard/icons/`
+- Temporary files are created only when needed and cleaned up automatically
 
 ### Animation Technology
+
 - Icons use CSS animations with `@keyframes` definitions
 - Animations include rotation, translation, and opacity changes
 - Cross-browser compatible with `-webkit-`, `-moz-`, and `-ms-` prefixes
 - Infinite loop animations for continuous effects
 
 ### File Structure
-```
+
+```text
 assets/
 ├── animated/          # Animated SVG icons (used by application)
 │   ├── clear-day.svg
@@ -71,19 +84,22 @@ assets/
 ## Icon Management
 
 ### Updating Icons
+
 Run the icon update script to fetch the latest icons:
+
 ```bash
-./get_weather_icons.sh
-```
 
 This script:
+
 1. Clones the Makin-Things/weather-icons repository
 2. Copies animated icons to `assets/animated/`
 3. Copies static icons to `assets/static/`
 4. Cleans up temporary files
 
 ### Icon Mapping
+
 Weather condition to icon mapping is handled in `src/ui/build_elements.rs`:
+
 ```rust
 fn get_weather_symbol(weather: WeatherSymbol) -> &'static str {
     match weather {
@@ -97,11 +113,13 @@ fn get_weather_symbol(weather: WeatherSymbol) -> &'static str {
 ## Verification
 
 The icon integration has been tested and verified:
+
 - ✅ All icons are properly embedded and accessible
 - ✅ 90% of icons contain CSS animations
 - ✅ Icon files range from 1.3KB to 16KB
 - ✅ rust-embed system works correctly
 - ✅ Weather condition mapping covers all major weather types
+- ✅ Temp-file animation rendering system functional
 
 ## Future Enhancements
 
