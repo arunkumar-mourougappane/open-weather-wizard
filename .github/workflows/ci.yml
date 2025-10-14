@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "*" ]
+  pull_request:
+    branches: [ "main", "*" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: Formatting check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+  clippy:
+    name: Clippy (lint)
+    runs-on: ubuntu-latest
+    needs: fmt
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain with clippy
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  build-matrix:
+    name: Build and test across platforms
+    runs-on: ${{ matrix.os }}
+    needs: clippy
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        build-type: [debug, release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up caching
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-build-${{ matrix.build-type }}
+
+      - name: Install GTK (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev pkg-config librsvg2-dev libglib2.0-dev
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.build-type }}" = "release" ]; then
+            cargo build --release --locked
+          else
+            cargo build
+          fi
+
+      - name: Run unit tests
+        if: matrix.build-type == 'debug'
+        run: cargo test --locked --all
+
+      - name: Upload release artifact (Linux, release)
+        if: runner.os == 'Linux' && matrix.build-type == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-weather-wizard-release
+          path: target/release/open-weather-wizard
