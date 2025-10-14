@@ -1,5 +1,7 @@
 # Open Weather Wizard - A Rust-based GTK Weather Application
 
+[![CI](https://github.com/arunkumar-mourougappane/open-weather-wizard/actions/workflows/ci.yml/badge.svg)](https://github.com/arunkumar-mourougappane/open-weather-wizard/actions/workflows/ci.yml)
+
 Open Weather Wizard is a simple and elegant desktop weather application written in Rust and GTK 4. It provides current weather, forecasts, and animated weather icons packaged with the app. Designed to be lightweight, extensible, and easy to localize or re-skin for different platforms and icon sets.
 
 ## Features
