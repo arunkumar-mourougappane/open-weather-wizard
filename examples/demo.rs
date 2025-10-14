@@ -12,8 +12,8 @@
 //! 3.  **Serialization**: Demonstrating the serialization of the `AppConfig`
 //!     struct to a JSON string and deserializing it back.
 
-use open_wearther_wizard::config::{AppConfig, LocationConfig, WeatherApiProvider};
-use open_wearther_wizard::weather_api::weather_provider::WeatherProviderFactory;
+use open_weather_wizard::config::{AppConfig, LocationConfig, WeatherApiProvider};
+use open_weather_wizard::weather_api::weather_provider::WeatherProviderFactory;
 
 /// The main entry point for the library functionality demo.
 ///
