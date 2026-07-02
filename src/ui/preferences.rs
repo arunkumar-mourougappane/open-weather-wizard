@@ -1,247 +1,137 @@
-//! # Preferences Window Module
+//! # Preferences Screen
 //!
-//! This module is responsible for creating and managing the application's
-//! preferences window. The window is a modal dialog that allows users to
-//! configure various settings, which are then persisted to a configuration file.
-//!
-//! Key features of the preferences window include:
-//! - **API Provider Selection**: A dropdown to choose between different weather
-//!   services (e.g., OpenWeather, Google Weather).
-//! - **API Token Management**: A secure entry field for the user's API token.
-//! - **Location Configuration**: Fields for setting the default city, state, and country.
-//!
-//! The window is built using GTK widgets and interacts with the main application's
-//! shared configuration state (`Arc<Mutex<AppConfig>>`). When settings are saved,
-//! it updates this shared state, writes the configuration to disk using `ConfigManager`,
-//! and triggers a callback to notify the main UI to refresh its data.
+//! Renders in its own OS window (opened by `Message::OpenPreferences` in `src/app.rs`),
+//! matching the previous GTK version's transient preferences dialog. Owns its own
+//! form-field state; the parent `AppState` intercepts `Save`/`Cancel` since only it
+//! holds the persisted `AppConfig`/`ConfigManager`.
 
-use gtk::prelude::*;
-use gtk::{ApplicationWindow, Box, Button, ComboBoxText, Entry, Grid, HeaderBar, Label, Window};
-use std::sync::{Arc, Mutex};
+use iced::widget::{button, column, container, pick_list, row, text, text_input};
+use iced::{Alignment, Element, Length};
 
-use crate::config::{AppConfig, ConfigManager, WeatherApiProvider};
+use crate::config::{AppConfig, WeatherApiProvider};
 
-/// Creates and displays the modal preferences window.
-///
-/// This function constructs the entire preferences UI, including labels, text entries,
-/// and dropdowns for all configurable options. It populates the fields with the
-/// current values from the provided `AppConfig`. It connects signal handlers for the
-/// "Save" and "Cancel" buttons.
-///
-/// When the "Save" button is clicked, it reads the new values from the UI widgets,
-/// updates the shared `AppConfig` state, persists the changes to the configuration
-/// file via `ConfigManager`, and finally executes the `on_save` closure to trigger
-/// actions in the main UI, such as re-fetching weather data.
-///
-/// # Arguments
-///
-/// * `parent` - The parent `ApplicationWindow` to which this modal dialog is transient.
-/// * `config` - A thread-safe, shared pointer to the application's `AppConfig`.
-/// * `on_save` - A closure that is executed after the configuration is successfully saved.
-///   This is typically used to refresh the main application view.
-///
-/// # Type Parameters
-///
-/// * `F` - The type of the `on_save` closure, which must be a `Fn()` with a `'static` lifetime.
-pub fn show_preferences_window<F>(
-    parent: &ApplicationWindow,
-    config: Arc<Mutex<AppConfig>>,
-    on_save: F,
-) where
-    F: Fn() + 'static,
-{
-    let window = Window::builder()
-        .title("Preferences")
-        .default_width(500)
-        .default_height(400)
-        .modal(true)
-        .transient_for(parent)
-        .build();
+const PROVIDERS: [WeatherApiProvider; 2] = [
+    WeatherApiProvider::OpenWeather,
+    WeatherApiProvider::GoogleWeather,
+];
 
-    // Create header bar
-    let header_bar = HeaderBar::builder()
-        .title_widget(&Label::new(Some("Preferences")))
-        .show_title_buttons(true)
-        .build();
-    window.set_titlebar(Some(&header_bar));
+#[derive(Debug, Clone)]
+pub struct State {
+    pub provider: WeatherApiProvider,
+    pub token_input: String,
+    pub city_input: String,
+    pub state_input: String,
+    pub country_input: String,
+}
 
-    // Create main content
-    let main_box = Box::builder()
-        .orientation(gtk::Orientation::Vertical)
+impl State {
+    pub fn from_config(config: &AppConfig) -> Self {
+        Self {
+            provider: config.weather_provider.clone(),
+            token_input: config.get_api_token().unwrap_or_default(),
+            city_input: config.location.city.clone(),
+            state_input: config.location.state.clone(),
+            country_input: config.location.country.clone(),
+        }
+    }
+
+    /// Writes the edited fields back into the shared `AppConfig`.
+    pub fn apply_to(&self, config: &mut AppConfig) {
+        config.weather_provider = self.provider.clone();
+        if !self.token_input.is_empty() {
+            config.set_api_token(&self.token_input);
+        }
+        config.location.city = self.city_input.clone();
+        config.location.state = self.state_input.clone();
+        config.location.country = self.country_input.clone();
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    ProviderSelected(WeatherApiProvider),
+    TokenChanged(String),
+    CityChanged(String),
+    StateChanged(String),
+    CountryChanged(String),
+    Save,
+    Cancel,
+}
+
+/// Mutates field-edit messages; `Save`/`Cancel` are intercepted by the parent
+/// `AppState::update` (see `src/app.rs`) since they need access to `AppConfig`.
+pub fn update(state: &mut State, message: Message) {
+    match message {
+        Message::ProviderSelected(provider) => state.provider = provider,
+        Message::TokenChanged(value) => state.token_input = value,
+        Message::CityChanged(value) => state.city_input = value,
+        Message::StateChanged(value) => state.state_input = value,
+        Message::CountryChanged(value) => state.country_input = value,
+        Message::Save | Message::Cancel => {
+            // Handled by the parent; nothing to do locally.
+        }
+    }
+}
+
+pub fn view(state: &State) -> Element<'_, Message> {
+    let form = column![
+        labeled_row(
+            "Weather Provider:",
+            pick_list(
+                PROVIDERS,
+                Some(state.provider.clone()),
+                Message::ProviderSelected
+            )
+            .into()
+        ),
+        labeled_row(
+            "API Token:",
+            text_input("Enter your API token", &state.token_input)
+                .secure(true)
+                .on_input(Message::TokenChanged)
+                .into()
+        ),
+        text("Default Location").size(16),
+        labeled_row(
+            "City:",
+            text_input("Enter city name", &state.city_input)
+                .on_input(Message::CityChanged)
+                .into()
+        ),
+        labeled_row(
+            "State/Province:",
+            text_input("Enter state or province", &state.state_input)
+                .on_input(Message::StateChanged)
+                .into()
+        ),
+        labeled_row(
+            "Country:",
+            text_input("Enter country code (e.g., US, CA)", &state.country_input)
+                .on_input(Message::CountryChanged)
+                .into()
+        ),
+    ]
+    .spacing(12);
+
+    let buttons = row![
+        button("Cancel").on_press(Message::Cancel),
+        button("Save").on_press(Message::Save),
+    ]
+    .spacing(8)
+    .align_y(Alignment::Center);
+
+    container(
+        column![form, buttons]
+            .spacing(20)
+            .padding(20)
+            .width(Length::Fill),
+    )
+    .into()
+}
+
+fn labeled_row<'a>(label: &'a str, field: Element<'a, Message>) -> Element<'a, Message> {
+    row![text(label).width(160), field]
         .spacing(12)
-        .margin_top(20)
-        .margin_bottom(20)
-        .margin_start(20)
-        .margin_end(20)
-        .build();
-
-    // Create grid for form layout
-    let grid = Grid::builder().row_spacing(12).column_spacing(12).build();
-
-    // Weather Provider section
-    let provider_label = Label::builder()
-        .label("Weather Provider:")
-        .halign(gtk::Align::Start)
-        .build();
-    grid.attach(&provider_label, 0, 0, 1, 1);
-
-    let provider_combo = ComboBoxText::new();
-    provider_combo.append_text("OpenWeather");
-    provider_combo.append_text("Google Weather");
-
-    // Set current provider
-    {
-        let current_config = config.lock().expect("Failed to lock config");
-        match current_config.weather_provider {
-            WeatherApiProvider::OpenWeather => provider_combo.set_active(Some(0)),
-            WeatherApiProvider::GoogleWeather => provider_combo.set_active(Some(1)),
-        }
-    }
-    grid.attach(&provider_combo, 1, 0, 1, 1);
-
-    // API Token section
-    let token_label = Label::builder()
-        .label("API Token:")
-        .halign(gtk::Align::Start)
-        .build();
-    grid.attach(&token_label, 0, 1, 1, 1);
-
-    let token_entry = Entry::builder()
-        .placeholder_text("Enter your API token")
-        .visibility(false) // Hide token for security
-        .build();
-
-    // Set current token (if available)
-    {
-        let current_config = config.lock().expect("Failed to lock config");
-        if let Ok(token) = current_config.get_api_token() {
-            token_entry.set_text(&token);
-        }
-    }
-    grid.attach(&token_entry, 1, 1, 1, 1);
-
-    // Location section header
-    let location_header = Label::builder()
-        .label("<b>Default Location</b>")
-        .use_markup(true)
-        .halign(gtk::Align::Start)
-        .margin_top(12)
-        .build();
-    grid.attach(&location_header, 0, 2, 2, 1);
-
-    // City
-    let city_label = Label::builder()
-        .label("City:")
-        .halign(gtk::Align::Start)
-        .build();
-    grid.attach(&city_label, 0, 3, 1, 1);
-
-    let city_entry = Entry::builder().placeholder_text("Enter city name").build();
-    {
-        let current_config = config.lock().expect("Failed to lock config");
-        city_entry.set_text(&current_config.location.city);
-    }
-    grid.attach(&city_entry, 1, 3, 1, 1);
-
-    // State
-    let state_label = Label::builder()
-        .label("State/Province:")
-        .halign(gtk::Align::Start)
-        .build();
-    grid.attach(&state_label, 0, 4, 1, 1);
-
-    let state_entry = Entry::builder()
-        .placeholder_text("Enter state or province")
-        .build();
-    {
-        let current_config = config.lock().expect("Failed to lock config");
-        state_entry.set_text(&current_config.location.state);
-    }
-    grid.attach(&state_entry, 1, 4, 1, 1);
-
-    // Country
-    let country_label = Label::builder()
-        .label("Country:")
-        .halign(gtk::Align::Start)
-        .build();
-    grid.attach(&country_label, 0, 5, 1, 1);
-
-    let country_entry = Entry::builder()
-        .placeholder_text("Enter country code (e.g., US, CA)")
-        .build();
-    {
-        let current_config = config.lock().expect("Failed to lock config");
-        country_entry.set_text(&current_config.location.country);
-    }
-    grid.attach(&country_entry, 1, 5, 1, 1);
-
-    main_box.append(&grid);
-
-    // Button box
-    let button_box = Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(6)
-        .halign(gtk::Align::End)
-        .margin_top(20)
-        .build();
-
-    let cancel_button = Button::builder().label("Cancel").build();
-
-    let save_button = Button::builder()
-        .label("Save")
-        .css_classes(vec!["suggested-action"])
-        .build();
-
-    button_box.append(&cancel_button);
-    button_box.append(&save_button);
-    main_box.append(&button_box);
-
-    window.set_child(Some(&main_box));
-
-    // Connect signals
-    let window_clone = window.clone();
-    cancel_button.connect_clicked(move |_| {
-        window_clone.close();
-    });
-
-    let window_clone = window.clone();
-    save_button.connect_clicked(move |_| {
-        // Save configuration
-        let mut current_config = config.lock().expect("Failed to lock config");
-
-        // Update provider
-        if let Some(active) = provider_combo.active() {
-            current_config.weather_provider = match active {
-                0 => WeatherApiProvider::OpenWeather,
-                1 => WeatherApiProvider::GoogleWeather,
-                _ => WeatherApiProvider::OpenWeather,
-            };
-        }
-
-        // Update API token
-        let token_text = token_entry.text();
-        if !token_text.is_empty() {
-            current_config.set_api_token(&token_text);
-        }
-
-        // Update location
-        current_config.location.city = city_entry.text().to_string();
-        current_config.location.state = state_entry.text().to_string();
-        current_config.location.country = country_entry.text().to_string();
-
-        // Save to file
-        if let Ok(config_manager) = ConfigManager::new() {
-            if let Err(e) = config_manager.save_config(&current_config) {
-                log::error!("Failed to save configuration: {}", e);
-                // TODO: Show error dialog
-            } else {
-                log::info!("Configuration saved successfully");
-                on_save();
-            }
-        }
-
-        window_clone.close();
-    });
-
-    window.present();
+        .align_y(Alignment::Center)
+        .into()
 }

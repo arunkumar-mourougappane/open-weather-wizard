@@ -11,6 +11,7 @@
 //! valid API key.
 
 use crate::config::LocationConfig;
+use crate::weather_api::forecast::ForecastResponse;
 use crate::weather_api::openweather_api::{ApiError, ApiResponse, Main, Weather};
 use crate::weather_api::weather_provider::WeatherProvider;
 use async_trait::async_trait;
@@ -74,6 +75,22 @@ impl WeatherProvider for GoogleWeatherProvider {
 
         log::info!("Google Weather API (mockup) returning mock data");
         Ok(mock_response)
+    }
+
+    /// Returns an empty placeholder forecast.
+    ///
+    /// There is no real Google Weather forecast integration; rather than fabricate
+    /// fake forecast days, this intentionally returns an empty `days` list so the
+    /// UI can omit the forecast row entirely for this provider.
+    async fn get_forecast(&self, location: &LocationConfig) -> Result<ForecastResponse, ApiError> {
+        log::info!(
+            "Google Weather API (mockup) get_forecast called for {}: no forecast data available",
+            location.city
+        );
+        Ok(ForecastResponse {
+            location_name: location.city.clone(),
+            days: vec![],
+        })
     }
 
     /// Returns the display name of the weather provider.
