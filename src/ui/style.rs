@@ -58,6 +58,20 @@ pub fn day_card(_theme: &Theme) -> container::Style {
     }
 }
 
+/// Today's forecast card: same shape as `day_card`, but with an accent
+/// border so it stands out at a glance from the other four days.
+pub fn day_card_today(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(CARD_BACKGROUND)),
+        border: Border {
+            color: ACCENT,
+            width: 2.0,
+            radius: 10.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
 /// The filled accent button used for primary actions (Save, Preferences).
 pub fn primary_button(_theme: &Theme, status: button::Status) -> button::Style {
     let background = match status {
@@ -101,6 +115,14 @@ pub fn muted(_theme: &Theme) -> text::Style {
     text::Style {
         color: Some(TEXT_MUTED),
     }
+}
+
+/// The inherited/default text color -- exists so call sites that only
+/// sometimes want a color override (e.g. "accent this label if it's today")
+/// can pick between two `Fn(&Theme) -> text::Style` values of the same type
+/// instead of conditionally calling `.style()` at all.
+pub fn default_text(_theme: &Theme) -> text::Style {
+    text::Style { color: None }
 }
 
 pub fn danger(_theme: &Theme) -> text::Style {
