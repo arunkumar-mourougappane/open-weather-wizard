@@ -2,8 +2,10 @@
 //!
 //! A horizontally-scrollable row of day cards (icon + hi/lo + short description),
 //! rendered below the current-conditions card on the main screen. Omitted entirely
-//! (not shown as an empty placeholder) when there's no forecast data -- e.g. for
-//! the Google Weather mock provider, which has no real forecast integration.
+//! while loading or on error (either already communicated elsewhere in the UI),
+//! but a provider with no real forecast integration (e.g. the Google Weather
+//! mock) gets an explicit muted hint rather than the row just silently
+//! vanishing, which otherwise reads as a bug rather than a provider limitation.
 
 use iced::widget::{column, container, row, scrollable, text};
 use iced::{Alignment, Element, Font, Length, font};
@@ -17,13 +19,18 @@ const BOLD: Font = Font {
     ..Font::DEFAULT
 };
 
-/// Renders the forecast row, or `None` if there's nothing to show (loading with
-/// no prior data yet, an error, or an empty day list).
+/// Renders the forecast row, or `None` if there's nothing to show at all
+/// (loading with no prior data yet, or an error).
 pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
     match forecast {
         ForecastStatus::Loading => None,
         ForecastStatus::Error => None,
-        ForecastStatus::Loaded(response) if response.days.is_empty() => None,
+        ForecastStatus::Loaded(response) if response.days.is_empty() => Some(
+            text("Forecast not available for this provider")
+                .size(13)
+                .style(style::muted)
+                .into(),
+        ),
         ForecastStatus::Loaded(response) => {
             // OpenWeatherMap's forecast always starts from "now", so the
             // first aggregated day is definitionally today -- no date/time
