@@ -58,6 +58,10 @@ pub struct AppConfig {
     pub weather_provider: WeatherApiProvider,
     pub api_token_encoded: String, // Base64 encoded API token
     pub location: LocationConfig,
+    /// `#[serde(default)]` so config files saved before this field existed
+    /// still load (missing -> `false`, i.e. light mode) instead of failing.
+    #[serde(default)]
+    pub dark_mode: bool,
 }
 
 impl Default for AppConfig {
@@ -67,6 +71,7 @@ impl Default for AppConfig {
             // Default OpenWeather API key (base64 encoded)
             api_token_encoded: STANDARD.encode("REDACTED-OPENWEATHERMAP-API-KEY"),
             location: LocationConfig::default(),
+            dark_mode: false,
         }
     }
 }

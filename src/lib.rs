@@ -45,6 +45,7 @@ mod tests {
                 state: "TS".to_string(),
                 country: "TC".to_string(),
             },
+            dark_mode: false,
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -91,6 +92,7 @@ mod tests {
                 state: "TS".to_string(),
                 country: "TC".to_string(),
             },
+            dark_mode: false,
         };
 
         let shared_config = Arc::new(Mutex::new(config));
