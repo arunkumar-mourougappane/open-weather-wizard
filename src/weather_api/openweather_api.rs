@@ -25,7 +25,7 @@ use serde::Deserialize;
 /// Represents weather conditions returned by the OpenWeatherMap API.
 ///
 /// This struct contains the main weather type (e.g., "Clouds", "Rain") and a more detailed description
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Weather {
     pub main: String,
     pub description: String,
@@ -34,7 +34,7 @@ pub struct Weather {
 /// Contains the main meteorological data like temperature and humidity.
 ///
 /// This struct is part of the `ApiResponse` and holds the primary weather metrics
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Main {
     pub temp: f64,
     pub humidity: i64,
@@ -44,7 +44,7 @@ pub struct Main {
 ///
 /// This struct aggregates the most relevant weather information, including a list of weather
 /// conditions, the main meteorological data like temperature and humidity, and the name of the city.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[allow(dead_code)]
 pub struct ApiResponse {
     pub weather: Vec<Weather>,
@@ -67,7 +67,7 @@ pub enum ApiError {
 }
 
 /// Represents a symbolic representation of a weather condition.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WeatherSymbol {
     Clear,
     Clouds,
@@ -155,18 +155,10 @@ async fn get_coords(
         .ok_or(GeocodeError::LocationNotFound)
 }
 
-/// Fetches weather data for a given location using the OpenWeatherMap API.
-///
-/// This is a two-step process:
-/// 1. It first calls `get_coords` to convert the location name into latitude and longitude.
-/// 2. It then uses these coordinates to fetch the current weather data.
-///
-/// # Arguments
-/// * `location` - The location to fetch weather for.
-/// * `api_key` - Your personal OpenWeatherMap API key.
-pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiResponse, ApiError> {
-    // Get coordinates for the location
-    let weather_location = get_coords(
+/// Resolves a `Location`'s coordinates via `get_coords`, mapping `GeocodeError`
+/// into the `ApiError` variants shared by both current-weather and forecast fetches.
+async fn resolve_location(location: &Location, api_key: &str) -> Result<Location, ApiError> {
+    get_coords(
         &location.name,
         location.state.as_deref().unwrap_or(""),
         &location.country.clone().unwrap_or("".to_string()),
@@ -182,7 +174,21 @@ pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiRespon
             println!("Location not found");
             ApiError::CityNotFound
         }
-    })?;
+    })
+}
+
+/// Fetches weather data for a given location using the OpenWeatherMap API.
+///
+/// This is a two-step process:
+/// 1. It first calls `get_coords` to convert the location name into latitude and longitude.
+/// 2. It then uses these coordinates to fetch the current weather data.
+///
+/// # Arguments
+/// * `location` - The location to fetch weather for.
+/// * `api_key` - Your personal OpenWeatherMap API key.
+pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiResponse, ApiError> {
+    // Get coordinates for the location
+    let weather_location = resolve_location(location, api_key).await?;
 
     // Construct the API URL. We use metric units for Celsius.
     let url = format!(
@@ -203,6 +209,40 @@ pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiRespon
     } else {
         // If the city is not found, the API returns a 404 status
         log::error!("City not found: {}", location.name);
+        Err(ApiError::CityNotFound)
+    }
+}
+
+/// Fetches a 5-day/3-hour forecast for a given location using the OpenWeatherMap
+/// API, aggregated into daily summaries by `forecast::aggregate_daily`.
+///
+/// # Arguments
+/// * `location` - The location to fetch a forecast for.
+/// * `api_key` - Your personal OpenWeatherMap API key.
+pub async fn get_forecast(
+    location: &Location,
+    api_key: &str,
+) -> Result<crate::weather_api::forecast::ForecastResponse, ApiError> {
+    let weather_location = resolve_location(location, api_key).await?;
+
+    let url = format!(
+        "https://api.openweathermap.org/data/2.5/forecast?lat={}&lon={}&appid={}&units=metric",
+        weather_location.lat, weather_location.lon, api_key
+    );
+
+    let response = reqwest::get(&url).await.map_err(ApiError::RequestFailed)?;
+    log::info!("Forecast API response: {}", response.status());
+    if response.status().is_success() {
+        let raw = response
+            .json::<crate::weather_api::forecast::RawForecastResponse>()
+            .await
+            .map_err(|_| {
+                log::error!("Failed to parse forecast API response");
+                ApiError::InvalidResponse
+            })?;
+        Ok(crate::weather_api::forecast::aggregate_daily(raw))
+    } else {
+        log::error!("Forecast not found for: {}", location.name);
         Err(ApiError::CityNotFound)
     }
 }
@@ -263,6 +303,15 @@ impl WeatherProvider for OpenWeatherProvider {
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError> {
         let api_location = location_config_to_location(location);
         get_weather(&api_location, &self.api_key).await
+    }
+
+    /// Fetches a forecast by implementing the `WeatherProvider` trait.
+    async fn get_forecast(
+        &self,
+        location: &LocationConfig,
+    ) -> Result<crate::weather_api::forecast::ForecastResponse, ApiError> {
+        let api_location = location_config_to_location(location);
+        get_forecast(&api_location, &self.api_key).await
     }
 
     /// Returns the display name of the provider.

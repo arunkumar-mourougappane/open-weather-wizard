@@ -10,6 +10,7 @@
 //! - **`weather_api`**: Provides an abstraction layer for fetching data from various
 //!   weather services.
 
+pub mod app;
 pub mod config;
 pub mod ui;
 pub mod weather_api;
@@ -135,5 +136,82 @@ mod tests {
         let weather_data = result.unwrap();
         assert_eq!(weather_data.name, "Test City");
         assert!(weather_data.weather[0].description.contains("mock"));
+    }
+
+    /// Verifies that `aggregate_daily` buckets 3-hourly entries by UTC calendar
+    /// date, computes correct min/max temperatures per day, and picks the midday
+    /// entry's condition as the day's dominant/representative condition.
+    #[test]
+    fn test_forecast_aggregation() {
+        use crate::weather_api::forecast::{
+            ForecastCity, ForecastListItem, RawForecastResponse, aggregate_daily,
+        };
+        use crate::weather_api::openweather_api::{Main, Weather};
+
+        let item = |dt_txt: &str, temp: f64, main: &str| ForecastListItem {
+            dt: 0,
+            main: Main { temp, humidity: 50 },
+            weather: vec![Weather {
+                main: main.to_string(),
+                description: format!("{main} description"),
+            }],
+            dt_txt: dt_txt.to_string(),
+        };
+
+        let raw = RawForecastResponse {
+            city: ForecastCity {
+                name: "Test City".to_string(),
+            },
+            list: vec![
+                // Day 1: cold overnight, midday is Rain -- should be the dominant condition.
+                item("2026-07-02 00:00:00", 10.0, "Clouds"),
+                item("2026-07-02 03:00:00", 8.0, "Clouds"),
+                item("2026-07-02 12:00:00", 15.0, "Rain"),
+                item("2026-07-02 21:00:00", 12.0, "Clouds"),
+                // Day 2: no midday entry -- falls back to the most frequent condition (Clear).
+                item("2026-07-03 00:00:00", 18.0, "Clear"),
+                item("2026-07-03 03:00:00", 16.0, "Clear"),
+                item("2026-07-03 21:00:00", 20.0, "Clouds"),
+            ],
+        };
+
+        let forecast = aggregate_daily(raw);
+
+        assert_eq!(forecast.location_name, "Test City");
+        assert_eq!(forecast.days.len(), 2);
+
+        let day1 = &forecast.days[0];
+        assert_eq!(day1.date, "2026-07-02");
+        assert_eq!(day1.temp_min, 8.0);
+        assert_eq!(day1.temp_max, 15.0);
+        assert_eq!(day1.description, "Rain description");
+
+        let day2 = &forecast.days[1];
+        assert_eq!(day2.date, "2026-07-03");
+        assert_eq!(day2.temp_min, 16.0);
+        assert_eq!(day2.temp_max, 20.0);
+        assert_eq!(day2.description, "Clear description");
+    }
+
+    /// Verifies that `GoogleWeatherProvider::get_forecast` returns an empty
+    /// placeholder rather than fabricated forecast data.
+    #[tokio::test]
+    async fn test_google_weather_forecast_is_empty() {
+        use crate::weather_api::google_weather_api::GoogleWeatherProvider;
+        use crate::weather_api::weather_provider::WeatherProvider;
+
+        let provider = GoogleWeatherProvider::new();
+        let location = LocationConfig {
+            city: "Test City".to_string(),
+            state: "TS".to_string(),
+            country: "TC".to_string(),
+        };
+
+        let result = provider.get_forecast(&location).await;
+        assert!(result.is_ok());
+
+        let forecast = result.unwrap();
+        assert_eq!(forecast.location_name, "Test City");
+        assert!(forecast.days.is_empty());
     }
 }

@@ -14,6 +14,7 @@
 //!   based on the application's configuration.
 
 use crate::config::{LocationConfig, WeatherApiProvider};
+use crate::weather_api::forecast::ForecastResponse;
 use crate::weather_api::openweather_api::{ApiError, ApiResponse, Location};
 use async_trait::async_trait;
 
@@ -33,6 +34,14 @@ pub trait WeatherProvider {
     /// Returns an `ApiError` if the data cannot be fetched, for reasons such as network
     /// issues, an invalid API key, or the location not being found.
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError>;
+
+    /// Fetches a multi-day forecast for a given location.
+    ///
+    /// # Errors
+    /// Returns an `ApiError` if the data cannot be fetched. Providers without a real
+    /// forecast integration (e.g. the Google Weather mock) may return an empty
+    /// `ForecastResponse` rather than an error.
+    async fn get_forecast(&self, location: &LocationConfig) -> Result<ForecastResponse, ApiError>;
 
     /// Returns the display name of the weather provider (e.g., "OpenWeather").
     #[allow(dead_code)]

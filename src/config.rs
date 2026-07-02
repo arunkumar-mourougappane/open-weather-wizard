@@ -18,16 +18,11 @@ use std::fs;
 use std::path::PathBuf;
 
 /// An enum representing the supported weather API providers.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub enum WeatherApiProvider {
+    #[default]
     OpenWeather,
     GoogleWeather,
-}
-
-impl Default for WeatherApiProvider {
-    fn default() -> Self {
-        Self::OpenWeather
-    }
 }
 
 impl std::fmt::Display for WeatherApiProvider {

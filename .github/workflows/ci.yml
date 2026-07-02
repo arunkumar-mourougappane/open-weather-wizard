@@ -32,10 +32,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - name: Install GTK dependencies
+      - name: Install iced/wgpu build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev pkg-config librsvg2-dev libglib2.0-dev
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev
       - name: Cache Cargo
         uses: actions/cache@v4
         with:
@@ -72,10 +72,10 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-build-${{ matrix.build-type }}
 
-      - name: Install GTK dependencies
+      - name: Install iced/wgpu build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev pkg-config librsvg2-dev libglib2.0-dev
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev
 
       - name: Build
         run: |
