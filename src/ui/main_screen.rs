@@ -4,7 +4,7 @@
 //! description, and humidity, plus Loading/Error states. This is the content of
 //! the app's main window (see `src/app.rs::view`).
 
-use iced::widget::{button, column, container, row, space, svg, text};
+use iced::widget::{button, column, container, row, space, text};
 use iced::{Alignment, Color, Element, Font, Length, font};
 
 use crate::app::{AppState, Message, WeatherStatus};
@@ -42,7 +42,6 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                 return text("No weather data available").into();
             };
             let symbol = get_weather_symbol(&weather.main);
-            let handle = icons::handle_for(symbol);
 
             let location_text = if !state.config.location.state.is_empty() {
                 format!("{}, {}", weather_data.name, state.config.location.state)
@@ -51,7 +50,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             };
 
             column![
-                svg(handle).width(128).height(128),
+                icons::view(symbol, 128.0),
                 text(location_text).size(24).font(BOLD),
                 text(format!("{:.1}\u{b0}C", weather_data.main.temp))
                     .size(30)

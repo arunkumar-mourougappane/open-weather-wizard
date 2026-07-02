@@ -7,5 +7,6 @@
 pub mod about;
 pub mod forecast_row;
 pub mod icons;
+pub mod lottie;
 pub mod main_screen;
 pub mod preferences;

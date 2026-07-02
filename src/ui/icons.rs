@@ -3,13 +3,20 @@
 //! Embeds the bundled SVG weather icons and exposes them as `iced::widget::svg::Handle`s
 //! keyed by `WeatherSymbol`, eager-loaded once at startup so `view()` never touches the
 //! embedded asset table on the hot render path.
+//!
+//! A handful of conditions (`assets/lottie/*.json`) additionally have a hand-authored
+//! Lottie animation (Phase C); `view()` dispatches to the animated `lottie` widget for
+//! those and falls back to the static SVG for everything else.
 
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
+use std::time::Instant;
 
+use iced::Element;
 use iced::widget::svg;
 use rust_embed::RustEmbed;
 
+use crate::ui::lottie;
 use crate::weather_api::openweather_api::WeatherSymbol;
 
 /// Embeds the contents of the `assets/` directory into the application binary.
@@ -92,4 +99,57 @@ pub fn handle_for(symbol: WeatherSymbol) -> svg::Handle {
 pub fn load_embedded_image(asset_path: &str) -> Option<iced::widget::image::Handle> {
     WeatherIconsAsset::get(asset_path)
         .map(|file| iced::widget::image::Handle::from_bytes(file.data.into_owned()))
+}
+
+/// Maps the subset of `WeatherSymbol`s that have a hand-authored Lottie
+/// animation to their `assets/lottie/*.json` path. Everything else falls
+/// back to the static SVG in `view()`.
+fn lottie_asset_path(symbol: WeatherSymbol) -> Option<&'static str> {
+    match symbol {
+        WeatherSymbol::Clear => Some("lottie/sun.json"),
+        WeatherSymbol::Clouds => Some("lottie/clouds.json"),
+        WeatherSymbol::Rain => Some("lottie/rain.json"),
+        WeatherSymbol::Snow => Some("lottie/snow.json"),
+        _ => None,
+    }
+}
+
+static ANIMATED_COMPOSITIONS: LazyLock<HashMap<&'static str, Arc<velato::Composition>>> =
+    LazyLock::new(|| {
+        let mut compositions = HashMap::new();
+        for symbol in ALL_SYMBOLS {
+            let Some(path) = lottie_asset_path(symbol) else {
+                continue;
+            };
+            let Some(embedded_file) = WeatherIconsAsset::get(path) else {
+                log::warn!("Lottie asset not found: {}", path);
+                continue;
+            };
+            match velato::Composition::from_slice(embedded_file.data.as_ref()) {
+                Ok(composition) => {
+                    compositions.insert(path, Arc::new(composition));
+                }
+                Err(e) => log::warn!("Failed to parse Lottie asset {}: {:?}", path, e),
+            }
+        }
+        compositions
+    });
+
+/// The instant animation playback is measured from, shared by every animated
+/// icon so their frame timing stays consistent with each other; there's no
+/// per-icon "start" since these are continuous ambient loops, not one-shots.
+static ANIMATION_START: LazyLock<Instant> = LazyLock::new(Instant::now);
+
+/// Renders the given weather symbol at `size` logical pixels square: the
+/// animated Lottie widget for symbols with a hand-authored composition
+/// (sun/clouds/rain/snow), the static SVG for everything else.
+pub fn view<'a, Message: 'a>(symbol: WeatherSymbol, size: f32) -> Element<'a, Message> {
+    if let Some(path) = lottie_asset_path(symbol)
+        && let Some(composition) = ANIMATED_COMPOSITIONS.get(path)
+    {
+        let frame = lottie::frame_at(composition, *ANIMATION_START);
+        return lottie::lottie(composition.clone(), frame, size);
+    }
+
+    svg(handle_for(symbol)).width(size).height(size).into()
 }

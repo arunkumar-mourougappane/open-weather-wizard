@@ -21,6 +21,10 @@ use crate::weather_api::weather_provider::WeatherProviderFactory;
 pub const DEFAULT_WINDOW_WIDTH: f32 = 720.0;
 pub const DEFAULT_WINDOW_HEIGHT: f32 = 480.0;
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
+/// Drives redraws for the animated Lottie icons (~30fps); `icons::view`
+/// computes each frame from wall-clock time, so this tick carries no state of
+/// its own -- it exists purely to make iced re-invoke `view()` regularly.
+const ANIMATION_TICK_INTERVAL: Duration = Duration::from_millis(33);
 
 /// The lifecycle of an async weather fetch, driving the main screen's display.
 #[derive(Debug, Clone)]
@@ -68,6 +72,7 @@ pub enum Message {
     OpenPreferences,
     OpenAbout,
     WindowCloseRequested(window::Id),
+    AnimationTick,
 
     Preferences(preferences::Message),
 }
@@ -191,6 +196,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.about_window = Some(id);
             open_task.discard()
         }
+        Message::AnimationTick => Task::none(),
         Message::WindowCloseRequested(id) => {
             if id == state.main_window {
                 return iced::exit();
@@ -258,6 +264,7 @@ pub fn view(state: &AppState, window_id: window::Id) -> Element<'_, Message> {
 pub fn subscription(_state: &AppState) -> Subscription<Message> {
     Subscription::batch([
         iced::time::every(AUTO_REFRESH_INTERVAL).map(Message::Tick),
+        iced::time::every(ANIMATION_TICK_INTERVAL).map(|_| Message::AnimationTick),
         window::close_requests().map(Message::WindowCloseRequested),
     ])
 }
