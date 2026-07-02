@@ -7,7 +7,7 @@
 //! since Preferences and About are rendered as separate OS windows, closer to the
 //! transient-window feel of the previous GTK version than an in-app overlay.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use iced::widget::Space;
 use iced::{Element, Size, Subscription, Task, Theme, window};
@@ -68,6 +68,11 @@ pub struct AppState {
     config_manager: ConfigManager,
     pub weather: WeatherStatus,
     pub forecast: ForecastStatus,
+    /// When `weather` last transitioned to `Loaded`, for the "Updated Xs ago"
+    /// label. `main_screen` re-renders often enough (via `AnimationTick`,
+    /// already needed for the animated icons) that this stays fresh without
+    /// its own timer.
+    pub last_updated: Option<Instant>,
     main_window: window::Id,
     prefs_window: Option<window::Id>,
     prefs_state: Option<preferences::State>,
@@ -143,6 +148,7 @@ pub fn boot() -> (AppState, Task<Message>) {
     let state = AppState {
         weather: WeatherStatus::Loading,
         forecast: ForecastStatus::Loading,
+        last_updated: None,
         main_window,
         prefs_window: None,
         prefs_state: None,
@@ -166,6 +172,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::WeatherFetched(Ok(response)) => {
             state.weather = WeatherStatus::Loaded(response);
+            state.last_updated = Some(Instant::now());
             Task::none()
         }
         Message::WeatherFetched(Err(error)) => {
