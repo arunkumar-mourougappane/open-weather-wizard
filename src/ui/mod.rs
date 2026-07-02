@@ -10,3 +10,4 @@ pub mod icons;
 pub mod lottie;
 pub mod main_screen;
 pub mod preferences;
+pub mod style;

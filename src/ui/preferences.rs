@@ -6,9 +6,15 @@
 //! holds the persisted `AppConfig`/`ConfigManager`.
 
 use iced::widget::{button, column, container, pick_list, row, text, text_input};
-use iced::{Alignment, Element, Length};
+use iced::{Alignment, Element, Font, Length, font};
 
 use crate::config::{AppConfig, WeatherApiProvider};
+use crate::ui::style;
+
+const BOLD: Font = Font {
+    weight: font::Weight::Bold,
+    ..Font::DEFAULT
+};
 
 const PROVIDERS: [WeatherApiProvider; 2] = [
     WeatherApiProvider::OpenWeather,
@@ -91,7 +97,10 @@ pub fn view(state: &State) -> Element<'_, Message> {
                 .on_input(Message::TokenChanged)
                 .into()
         ),
-        text("Default Location").size(16),
+        text("Default Location")
+            .size(16)
+            .font(BOLD)
+            .style(style::accent),
         labeled_row(
             "City:",
             text_input("Enter city name", &state.city_input)
@@ -114,14 +123,18 @@ pub fn view(state: &State) -> Element<'_, Message> {
     .spacing(12);
 
     let buttons = row![
-        button("Cancel").on_press(Message::Cancel),
-        button("Save").on_press(Message::Save),
+        button("Cancel")
+            .on_press(Message::Cancel)
+            .style(style::secondary_button),
+        button("Save")
+            .on_press(Message::Save)
+            .style(style::primary_button),
     ]
     .spacing(8)
     .align_y(Alignment::Center);
 
     container(
-        column![form, buttons]
+        column![text("Preferences").size(20).font(BOLD), form, buttons]
             .spacing(20)
             .padding(20)
             .width(Length::Fill),

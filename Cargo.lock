@@ -3246,6 +3246,7 @@ dependencies = [
  "dirs",
  "env_logger",
  "iced",
+ "image",
  "log",
  "reqwest",
  "rust-embed",

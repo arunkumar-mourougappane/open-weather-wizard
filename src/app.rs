@@ -19,7 +19,19 @@ use crate::weather_api::openweather_api::ApiResponse;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
 
 pub const DEFAULT_WINDOW_WIDTH: f32 = 720.0;
-pub const DEFAULT_WINDOW_HEIGHT: f32 = 480.0;
+/// Tall enough that the toolbar + current-conditions panel (icon, location,
+/// temp, description, humidity) + forecast row all fit without the main
+/// screen's `scrollable` wrapper needing to kick in, at the default size.
+pub const DEFAULT_WINDOW_HEIGHT: f32 = 620.0;
+/// Below this the content no longer fits without scrolling -- which
+/// `main_screen::view`'s `scrollable` wrapper now handles gracefully, so
+/// this floor exists for comfort (avoid *always* needing to scroll at the
+/// minimum size) rather than to prevent distortion, since fixed-size
+/// widgets like the animated icons can no longer get silently squeezed.
+const MAIN_WINDOW_MIN_SIZE: Size = Size::new(480.0, 420.0);
+/// The preferences form's fixed 160px label column plus a usable input
+/// width needs at least this much room before fields start getting crushed.
+const PREFERENCES_WINDOW_MIN_SIZE: Size = Size::new(440.0, 400.0);
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 /// Drives redraws for the animated Lottie icons (~30fps); `icons::view`
 /// computes each frame from wall-clock time, so this tick carries no state of
@@ -121,6 +133,8 @@ pub fn boot() -> (AppState, Task<Message>) {
 
     let (main_window, open_task) = window::open(window::Settings {
         size: Size::new(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT),
+        min_size: Some(MAIN_WINDOW_MIN_SIZE),
+        icon: crate::ui::icons::load_window_icon("icon/icon.png"),
         ..window::Settings::default()
     });
 
@@ -179,6 +193,8 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.prefs_state = Some(preferences::State::from_config(&state.config));
             let (id, open_task) = window::open(window::Settings {
                 size: Size::new(500.0, 420.0),
+                min_size: Some(PREFERENCES_WINDOW_MIN_SIZE),
+                icon: crate::ui::icons::load_window_icon("icon/icon.png"),
                 ..window::Settings::default()
             });
             state.prefs_window = Some(id);
@@ -191,6 +207,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             let (id, open_task) = window::open(window::Settings {
                 size: Size::new(420.0, 360.0),
                 resizable: false,
+                icon: crate::ui::icons::load_window_icon("icon/icon.png"),
                 ..window::Settings::default()
             });
             state.about_window = Some(id);
