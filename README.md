@@ -41,7 +41,7 @@ The app uses GTK4's native SVG rendering capabilities through librsvg to display
 - Written to temporary files at runtime to enable animation playbook
 - Rendered using the system's librsvg library which supports CSS animations and SMIL
 
-For complete technical details, see [docs_meta_data/ANIMATED_ICONS.md](docs_meta_data/ANIMATED_ICONS.md).
+For complete technical details, see [docs/ICON_MAPPING.md](docs/ICON_MAPPING.md).
 
 ## Installation
 
@@ -197,7 +197,7 @@ The project is organized into the following directories:
 │   ├── animated/        # Animated SVG weather icons (used by app)
 │   ├── static/          # Static SVG weather icons (fallback)
 │   └── icon/            # App icons (PNG format for About dialog and titlebar)
-├── docs_meta_data/      # Contains documentation-related files
+├── docs/                # Architecture, UI design, and icon-mapping documentation
 ├── examples/            # Contains example code and demos
 ├── src/                 # Contains the source code
 │   ├── config.rs        # Handles application configuration
