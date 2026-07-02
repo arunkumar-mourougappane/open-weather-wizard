@@ -214,4 +214,30 @@ mod tests {
         assert_eq!(forecast.location_name, "Test City");
         assert!(forecast.days.is_empty());
     }
+
+    /// Verifies the hand-authored Lottie assets under `assets/lottie/` are
+    /// valid, parseable compositions with a non-empty, finite frame range --
+    /// catches malformed JSON before it ever reaches the animated-icon widget.
+    #[test]
+    fn test_lottie_assets_parse() {
+        let assets: [(&str, &str); 4] = [
+            ("sun", include_str!("../assets/lottie/sun.json")),
+            ("clouds", include_str!("../assets/lottie/clouds.json")),
+            ("rain", include_str!("../assets/lottie/rain.json")),
+            ("snow", include_str!("../assets/lottie/snow.json")),
+        ];
+
+        for (name, json) in assets {
+            let composition = velato::Composition::from_slice(json.as_bytes())
+                .unwrap_or_else(|e| panic!("{name}.json failed to parse: {e:?}"));
+            assert!(
+                composition.frames.end > composition.frames.start,
+                "{name}.json must have a non-empty frame range"
+            );
+            assert!(
+                !composition.layers.is_empty(),
+                "{name}.json must have at least one layer"
+            );
+        }
+    }
 }

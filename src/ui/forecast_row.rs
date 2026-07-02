@@ -5,7 +5,7 @@
 //! (not shown as an empty placeholder) when there's no forecast data -- e.g. for
 //! the Google Weather mock provider, which has no real forecast integration.
 
-use iced::widget::{column, container, row, scrollable, svg, text};
+use iced::widget::{column, container, row, scrollable, text};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{ForecastStatus, Message};
@@ -41,12 +41,10 @@ pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
 }
 
 fn day_card(day: &ForecastDay) -> Element<'_, Message> {
-    let handle = icons::handle_for(day.symbol);
-
     container(
         column![
             text(day.date.clone()).size(14).font(BOLD),
-            svg(handle).width(48).height(48),
+            icons::view(day.symbol, 48.0),
             text(format!(
                 "{:.0}\u{b0} / {:.0}\u{b0}",
                 day.temp_max, day.temp_min
