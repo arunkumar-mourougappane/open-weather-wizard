@@ -48,10 +48,17 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         .spacing(12)
         .align_x(Alignment::Center)
         .into(),
-        WeatherStatus::Error(message) => text(format!("Error: {}", message))
-            .size(16)
-            .style(style::danger)
-            .into(),
+        WeatherStatus::Error(message) => column![
+            text(format!("Error: {}", message))
+                .size(16)
+                .style(style::danger),
+            button("Retry")
+                .on_press(Message::RefreshRequested)
+                .style(style::primary_button),
+        ]
+        .spacing(12)
+        .align_x(Alignment::Center)
+        .into(),
         WeatherStatus::Loaded(weather_data) => {
             let Some(weather) = weather_data.weather.first() else {
                 return text("No weather data available").into();
