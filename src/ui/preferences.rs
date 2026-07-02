@@ -51,6 +51,27 @@ impl State {
         config.location.state = self.state_input.clone();
         config.location.country = self.country_input.clone();
     }
+
+    /// Field-level problems that must be fixed before `Save` is allowed.
+    /// State/Province is deliberately not validated -- plenty of real
+    /// locations don't have one.
+    pub fn validation_errors(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        if self.city_input.trim().is_empty() {
+            errors.push("City is required.".to_string());
+        }
+        if self.country_input.trim().is_empty() {
+            errors.push("Country is required.".to_string());
+        }
+        // Only OpenWeather actually needs a token; the Google Weather mock
+        // provider works with none (see WeatherProvider::requires_api_key).
+        if self.provider == WeatherApiProvider::OpenWeather && self.token_input.trim().is_empty() {
+            errors.push("API Token is required for OpenWeather.".to_string());
+        }
+
+        errors
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -122,24 +143,33 @@ pub fn view(state: &State) -> Element<'_, Message> {
     ]
     .spacing(12);
 
+    let errors = state.validation_errors();
+
     let buttons = row![
         button("Cancel")
             .on_press(Message::Cancel)
             .style(style::secondary_button),
         button("Save")
-            .on_press(Message::Save)
+            .on_press_maybe(errors.is_empty().then_some(Message::Save))
             .style(style::primary_button),
     ]
     .spacing(8)
     .align_y(Alignment::Center);
 
-    container(
-        column![text("Preferences").size(20).font(BOLD), form, buttons]
-            .spacing(20)
-            .padding(20)
-            .width(Length::Fill),
-    )
-    .into()
+    let mut layout = column![text("Preferences").size(20).font(BOLD), form]
+        .spacing(20)
+        .padding(20)
+        .width(Length::Fill);
+
+    if !errors.is_empty() {
+        let mut error_list = column![].spacing(2);
+        for error in errors.iter().cloned() {
+            error_list = error_list.push(text(error).size(12).style(style::danger));
+        }
+        layout = layout.push(error_list);
+    }
+
+    container(layout.push(buttons)).into()
 }
 
 fn labeled_row<'a>(label: &'a str, field: Element<'a, Message>) -> Element<'a, Message> {
