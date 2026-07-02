@@ -42,10 +42,23 @@ pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
                 .map(|(index, day)| day_card(day, index == 0));
             let cards_row = row(cards).spacing(12);
 
+            // Center the row so unused width splits evenly on both sides
+            // instead of collecting only on the right (the row's natural
+            // width is just its cards' -- when that's narrower than the
+            // panel above it, left-aligning it inside a Fill-width
+            // scrollable, as before, pinned it to the left edge). Centering
+            // is a no-op once there are enough cards to overflow the
+            // viewport, since content wider than its container has no
+            // leftover space to distribute.
+            //
+            // A carousel, not a document: the scrollbar track/thumb are
+            // hidden (Scrollbar::hidden() zeroes their width), but the row
+            // still scrolls via trackpad/mouse-wheel/click-drag -- hiding
+            // the scrollbar doesn't disable scrolling itself.
             Some(
-                scrollable(cards_row)
+                scrollable(container(cards_row).center_x(Length::Fill))
                     .direction(scrollable::Direction::Horizontal(
-                        scrollable::Scrollbar::default(),
+                        scrollable::Scrollbar::hidden(),
                     ))
                     .width(Length::Fill)
                     .into(),
