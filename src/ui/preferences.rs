@@ -5,7 +5,9 @@
 //! form-field state; the parent `AppState` intercepts `Save`/`Cancel` since only it
 //! holds the persisted `AppConfig`/`ConfigManager`.
 
-use iced::widget::{button, column, container, pick_list, row, text, text_input, toggler};
+use iced::widget::{
+    button, column, container, pick_list, row, scrollable, text, text_input, toggler,
+};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::config::{AppConfig, WeatherApiProvider};
@@ -106,50 +108,63 @@ pub fn update(state: &mut State, message: Message) {
 }
 
 pub fn view(state: &State) -> Element<'_, Message> {
-    let form = column![
-        labeled_row(
-            "Weather Provider:",
-            pick_list(
-                PROVIDERS,
-                Some(state.provider.clone()),
-                Message::ProviderSelected
-            )
-            .into()
-        ),
-        labeled_row(
-            "API Token:",
-            text_input("Enter your API token", &state.token_input)
-                .secure(true)
-                .on_input(Message::TokenChanged)
+    let provider_section = section(
+        "Weather Provider",
+        column![
+            labeled_row(
+                "Provider:",
+                pick_list(
+                    PROVIDERS,
+                    Some(state.provider.clone()),
+                    Message::ProviderSelected
+                )
                 .into()
-        ),
-        text("Default Location")
-            .size(16)
-            .font(BOLD)
-            .style(style::accent),
-        labeled_row(
-            "City:",
-            text_input("Enter city name", &state.city_input)
-                .on_input(Message::CityChanged)
-                .into()
-        ),
-        labeled_row(
-            "State/Province:",
-            text_input("Enter state or province", &state.state_input)
-                .on_input(Message::StateChanged)
-                .into()
-        ),
-        labeled_row(
-            "Country:",
-            text_input("Enter country code (e.g., US, CA)", &state.country_input)
-                .on_input(Message::CountryChanged)
-                .into()
-        ),
+            ),
+            labeled_row(
+                "API Token:",
+                text_input("Enter your API token", &state.token_input)
+                    .secure(true)
+                    .on_input(Message::TokenChanged)
+                    .into()
+            ),
+        ]
+        .spacing(12)
+        .into(),
+    );
+
+    let location_section = section(
+        "Default Location",
+        column![
+            labeled_row(
+                "City:",
+                text_input("Enter city name", &state.city_input)
+                    .on_input(Message::CityChanged)
+                    .into()
+            ),
+            labeled_row(
+                "State/Province:",
+                text_input("Enter state or province", &state.state_input)
+                    .on_input(Message::StateChanged)
+                    .into()
+            ),
+            labeled_row(
+                "Country:",
+                text_input("Enter country code (e.g., US, CA)", &state.country_input)
+                    .on_input(Message::CountryChanged)
+                    .into()
+            ),
+        ]
+        .spacing(12)
+        .into(),
+    );
+
+    let appearance_section = section(
+        "Appearance",
         toggler(state.dark_mode)
             .label("Dark mode")
-            .on_toggle(Message::DarkModeToggled),
-    ]
-    .spacing(12);
+            .on_toggle(Message::DarkModeToggled)
+            .into(),
+    );
 
     let errors = state.validation_errors();
 
@@ -164,10 +179,15 @@ pub fn view(state: &State) -> Element<'_, Message> {
     .spacing(8)
     .align_y(Alignment::Center);
 
-    let mut layout = column![text("Preferences").size(20).font(BOLD), form]
-        .spacing(20)
-        .padding(20)
-        .width(Length::Fill);
+    let mut layout = column![
+        text("Preferences").size(20).font(BOLD),
+        provider_section,
+        location_section,
+        appearance_section,
+    ]
+    .spacing(16)
+    .padding(20)
+    .width(Length::Fill);
 
     if !errors.is_empty() {
         let mut error_list = column![].spacing(2);
@@ -177,7 +197,26 @@ pub fn view(state: &State) -> Element<'_, Message> {
         layout = layout.push(error_list);
     }
 
-    container(layout.push(buttons)).into()
+    scrollable(container(layout.push(buttons)))
+        .height(Length::Fill)
+        .into()
+}
+
+/// A titled card grouping related fields, matching the forecast day-card
+/// visual style so the form reads as distinct sections instead of one flat
+/// list.
+fn section<'a>(title: &'a str, content: Element<'a, Message>) -> Element<'a, Message> {
+    container(
+        column![
+            text(title).size(14).font(BOLD).style(style::accent),
+            content
+        ]
+        .spacing(12)
+        .width(Length::Fill),
+    )
+    .padding(14)
+    .style(style::day_card)
+    .into()
 }
 
 fn labeled_row<'a>(label: &'a str, field: Element<'a, Message>) -> Element<'a, Message> {
