@@ -10,7 +10,7 @@ use iced::widget::{button, column, container, row, scrollable, space, text};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{AppState, Message, WeatherStatus};
-use crate::ui::{forecast_row, icons, style};
+use crate::ui::{forecast_row, icons, spinner, style};
 use crate::weather_api::openweather_api::get_weather_symbol;
 
 const BOLD: Font = Font {
@@ -41,10 +41,13 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     .align_y(Alignment::Center);
 
     let content: Element<'_, Message> = match &state.weather {
-        WeatherStatus::Loading => text("Fetching weather...")
-            .size(18)
-            .style(style::muted)
-            .into(),
+        WeatherStatus::Loading => column![
+            spinner::spinner(32.0),
+            text("Fetching weather...").size(18).style(style::muted),
+        ]
+        .spacing(12)
+        .align_x(Alignment::Center)
+        .into(),
         WeatherStatus::Error(message) => text(format!("Error: {}", message))
             .size(16)
             .style(style::danger)
