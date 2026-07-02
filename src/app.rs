@@ -199,7 +199,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             }
             state.prefs_state = Some(preferences::State::from_config(&state.config));
             let (id, open_task) = window::open(window::Settings {
-                size: Size::new(500.0, 420.0),
+                size: Size::new(520.0, 560.0),
                 min_size: Some(PREFERENCES_WINDOW_MIN_SIZE),
                 icon: crate::ui::icons::load_window_icon("icon/icon.png"),
                 ..window::Settings::default()
