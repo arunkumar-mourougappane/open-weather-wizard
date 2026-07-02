@@ -4,6 +4,8 @@
 //! description, and humidity, plus Loading/Error states. This is the content of
 //! the app's main window (see `src/app.rs::view`).
 
+use std::time::Instant;
+
 use iced::widget::{button, column, container, row, scrollable, space, text};
 use iced::{Alignment, Element, Font, Length, font};
 
@@ -59,7 +61,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                 weather_data.name.clone()
             };
 
-            column![
+            let mut card = column![
                 icons::view(symbol, 128.0),
                 text(location_text).size(24).font(BOLD),
                 text(format!("{:.1}\u{b0}C", weather_data.main.temp))
@@ -72,8 +74,13 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                     .style(style::muted),
             ]
             .spacing(8)
-            .align_x(Alignment::Center)
-            .into()
+            .align_x(Alignment::Center);
+
+            if let Some(label) = updated_label(state.last_updated) {
+                card = card.push(text(label).size(12).style(style::muted));
+            }
+
+            card.into()
         }
     };
 
@@ -98,4 +105,16 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     // whatever space is left -- that squeeze is what actually distorted them,
     // not the icons' own sizing.
     scrollable(layout).height(Length::Fill).into()
+}
+
+/// Formats "Updated just now" / "Updated Xm ago" from the last successful
+/// fetch time. `None` (nothing fetched yet) renders nothing.
+fn updated_label(last_updated: Option<Instant>) -> Option<String> {
+    let elapsed = last_updated?.elapsed();
+    let label = if elapsed.as_secs() < 60 {
+        "Updated just now".to_string()
+    } else {
+        format!("Updated {}m ago", elapsed.as_secs() / 60)
+    };
+    Some(label)
 }
