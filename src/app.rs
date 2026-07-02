@@ -293,8 +293,12 @@ pub fn subscription(_state: &AppState) -> Subscription<Message> {
     ])
 }
 
-pub fn theme(_state: &AppState, _window: window::Id) -> Theme {
-    Theme::Light
+pub fn theme(state: &AppState, _window: window::Id) -> Theme {
+    if state.config.dark_mode {
+        Theme::Dark
+    } else {
+        Theme::Light
+    }
 }
 
 pub fn title(_state: &AppState, _window_id: window::Id) -> String {

@@ -1,42 +1,38 @@
 //! # Shared Visual Style
 //!
-//! A small hand-picked palette and reusable container/button/text styles,
-//! used across every screen instead of the raw `Theme::Light` defaults.
-//! Centralized here so the look stays consistent without copy-pasting
-//! `Color::from_rgb(...)` literals at each call site.
+//! A small hand-picked accent palette plus reusable container/button/text
+//! styles, used across every screen instead of one-off inline colors.
+//! Backgrounds/borders/muted text are derived from the active `Theme`'s
+//! `extended_palette()` (not hardcoded) so the same styles work correctly
+//! under both `Theme::Light` and `Theme::Dark` -- see `AppConfig::dark_mode`.
 
 use iced::widget::{button, container, text};
 use iced::{Background, Border, Color, Shadow, Theme, Vector};
 
 /// Sky-blue accent, used for primary actions and the temperature/location
-/// text -- the two things a glance at the app should land on first.
+/// text -- the two things a glance at the app should land on first. Kept as
+/// a single fixed brand color rather than theme-derived, since it reads
+/// clearly against both a white and a dark panel background.
 pub const ACCENT: Color = Color::from_rgb(0.11, 0.45, 0.85);
 /// Slightly darker accent for hover/press states.
 pub const ACCENT_STRONG: Color = Color::from_rgb(0.07, 0.35, 0.70);
-/// Warm amber, reserved for error text (distinct from the accent so errors
-/// don't read as "just another blue label").
-pub const DANGER: Color = Color::from_rgb(0.82, 0.22, 0.18);
 
-pub const CARD_BACKGROUND: Color = Color::from_rgb(0.96, 0.98, 1.0);
-pub const CARD_BORDER: Color = Color::from_rgb(0.82, 0.89, 0.96);
-pub const PANEL_BACKGROUND: Color = Color::WHITE;
+/// The main content panel behind the current-conditions display: a card in
+/// the theme's base background/border colors with a faint shadow, lifting
+/// it off the window background rather than the text floating on bare
+/// window color.
+pub fn panel(theme: &Theme) -> container::Style {
+    let palette = theme.extended_palette();
 
-pub const TEXT_PRIMARY: Color = Color::from_rgb(0.13, 0.15, 0.18);
-pub const TEXT_MUTED: Color = Color::from_rgb(0.45, 0.49, 0.54);
-
-/// The main content panel behind the current-conditions display: a soft
-/// white card with a faint border and shadow, lifting it off the window
-/// background instead of the text just floating on bare white.
-pub fn panel(_theme: &Theme) -> container::Style {
     container::Style {
-        background: Some(Background::Color(PANEL_BACKGROUND)),
+        background: Some(Background::Color(palette.background.base.color)),
         border: Border {
-            color: CARD_BORDER,
+            color: palette.background.strong.color,
             width: 1.0,
             radius: 16.0.into(),
         },
         shadow: Shadow {
-            color: Color::from_rgba(0.0, 0.0, 0.0, 0.06),
+            color: Color::from_rgba(0.0, 0.0, 0.0, 0.08),
             offset: Vector::new(0.0, 2.0),
             blur_radius: 12.0,
         },
@@ -44,13 +40,15 @@ pub fn panel(_theme: &Theme) -> container::Style {
     }
 }
 
-/// A single forecast day card: a smaller, pale-blue-tinted card so the row
-/// reads as a set of distinct chips rather than bare padding.
-pub fn day_card(_theme: &Theme) -> container::Style {
+/// A single forecast day card: a subtly-tinted card so the row reads as a
+/// set of distinct chips rather than bare padding.
+pub fn day_card(theme: &Theme) -> container::Style {
+    let palette = theme.extended_palette();
+
     container::Style {
-        background: Some(Background::Color(CARD_BACKGROUND)),
+        background: Some(Background::Color(palette.background.weak.color)),
         border: Border {
-            color: CARD_BORDER,
+            color: palette.background.strong.color,
             width: 1.0,
             radius: 10.0.into(),
         },
@@ -60,9 +58,11 @@ pub fn day_card(_theme: &Theme) -> container::Style {
 
 /// Today's forecast card: same shape as `day_card`, but with an accent
 /// border so it stands out at a glance from the other four days.
-pub fn day_card_today(_theme: &Theme) -> container::Style {
+pub fn day_card_today(theme: &Theme) -> container::Style {
+    let palette = theme.extended_palette();
+
     container::Style {
-        background: Some(Background::Color(CARD_BACKGROUND)),
+        background: Some(Background::Color(palette.background.weak.color)),
         border: Border {
             color: ACCENT,
             width: 2.0,
@@ -73,11 +73,13 @@ pub fn day_card_today(_theme: &Theme) -> container::Style {
 }
 
 /// The filled accent button used for primary actions (Save, Preferences).
-pub fn primary_button(_theme: &Theme, status: button::Status) -> button::Style {
+pub fn primary_button(theme: &Theme, status: button::Status) -> button::Style {
+    let palette = theme.extended_palette();
+
     let background = match status {
         button::Status::Hovered | button::Status::Pressed => ACCENT_STRONG,
         button::Status::Active => ACCENT,
-        button::Status::Disabled => Color::from_rgb(0.75, 0.78, 0.82),
+        button::Status::Disabled => palette.background.strong.color,
     };
 
     button::Style {
@@ -92,11 +94,19 @@ pub fn primary_button(_theme: &Theme, status: button::Status) -> button::Style {
 }
 
 /// The outlined/ghost button used for secondary actions (Cancel).
-pub fn secondary_button(_theme: &Theme, status: button::Status) -> button::Style {
+pub fn secondary_button(theme: &Theme, status: button::Status) -> button::Style {
+    let palette = theme.extended_palette();
+
     let (border_color, text_color) = match status {
         button::Status::Hovered | button::Status::Pressed => (ACCENT_STRONG, ACCENT_STRONG),
-        button::Status::Active => (CARD_BORDER, TEXT_PRIMARY),
-        button::Status::Disabled => (CARD_BORDER, TEXT_MUTED),
+        button::Status::Active => (
+            palette.background.strong.color,
+            palette.background.base.text,
+        ),
+        button::Status::Disabled => (
+            palette.background.weak.color,
+            palette.background.strong.color,
+        ),
     };
 
     button::Style {
@@ -111,9 +121,14 @@ pub fn secondary_button(_theme: &Theme, status: button::Status) -> button::Style
     }
 }
 
-pub fn muted(_theme: &Theme) -> text::Style {
+/// A dimmer version of the theme's own text color, for secondary/supporting
+/// text (descriptions, timestamps, hints).
+pub fn muted(theme: &Theme) -> text::Style {
+    let palette = theme.extended_palette();
+    let base = palette.background.base.text;
+
     text::Style {
-        color: Some(TEXT_MUTED),
+        color: Some(Color { a: 0.6, ..base }),
     }
 }
 
@@ -125,9 +140,11 @@ pub fn default_text(_theme: &Theme) -> text::Style {
     text::Style { color: None }
 }
 
-pub fn danger(_theme: &Theme) -> text::Style {
+/// Error/danger text, using the theme's own danger palette so it stays
+/// legible (and stays "red", not just "less blue") in dark mode too.
+pub fn danger(theme: &Theme) -> text::Style {
     text::Style {
-        color: Some(DANGER),
+        color: Some(theme.extended_palette().danger.base.color),
     }
 }
 

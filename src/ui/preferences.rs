@@ -5,7 +5,7 @@
 //! form-field state; the parent `AppState` intercepts `Save`/`Cancel` since only it
 //! holds the persisted `AppConfig`/`ConfigManager`.
 
-use iced::widget::{button, column, container, pick_list, row, text, text_input};
+use iced::widget::{button, column, container, pick_list, row, text, text_input, toggler};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::config::{AppConfig, WeatherApiProvider};
@@ -28,6 +28,7 @@ pub struct State {
     pub city_input: String,
     pub state_input: String,
     pub country_input: String,
+    pub dark_mode: bool,
 }
 
 impl State {
@@ -38,6 +39,7 @@ impl State {
             city_input: config.location.city.clone(),
             state_input: config.location.state.clone(),
             country_input: config.location.country.clone(),
+            dark_mode: config.dark_mode,
         }
     }
 
@@ -50,6 +52,7 @@ impl State {
         config.location.city = self.city_input.clone();
         config.location.state = self.state_input.clone();
         config.location.country = self.country_input.clone();
+        config.dark_mode = self.dark_mode;
     }
 
     /// Field-level problems that must be fixed before `Save` is allowed.
@@ -81,6 +84,7 @@ pub enum Message {
     CityChanged(String),
     StateChanged(String),
     CountryChanged(String),
+    DarkModeToggled(bool),
     Save,
     Cancel,
 }
@@ -94,6 +98,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::CityChanged(value) => state.city_input = value,
         Message::StateChanged(value) => state.state_input = value,
         Message::CountryChanged(value) => state.country_input = value,
+        Message::DarkModeToggled(value) => state.dark_mode = value,
         Message::Save | Message::Cancel => {
             // Handled by the parent; nothing to do locally.
         }
@@ -140,6 +145,9 @@ pub fn view(state: &State) -> Element<'_, Message> {
                 .on_input(Message::CountryChanged)
                 .into()
         ),
+        toggler(state.dark_mode)
+            .label("Dark mode")
+            .on_toggle(Message::DarkModeToggled),
     ]
     .spacing(12);
 
