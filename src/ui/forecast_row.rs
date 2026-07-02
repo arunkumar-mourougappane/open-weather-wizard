@@ -25,7 +25,14 @@ pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
         ForecastStatus::Error => None,
         ForecastStatus::Loaded(response) if response.days.is_empty() => None,
         ForecastStatus::Loaded(response) => {
-            let cards = response.days.iter().map(day_card);
+            // OpenWeatherMap's forecast always starts from "now", so the
+            // first aggregated day is definitionally today -- no date/time
+            // crate needed to figure out which card that is.
+            let cards = response
+                .days
+                .iter()
+                .enumerate()
+                .map(|(index, day)| day_card(day, index == 0));
             let cards_row = row(cards).spacing(12);
 
             Some(
@@ -40,10 +47,20 @@ pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
     }
 }
 
-fn day_card(day: &ForecastDay) -> Element<'_, Message> {
+fn day_card(day: &ForecastDay, is_today: bool) -> Element<'_, Message> {
+    let date_label = if is_today {
+        "Today".to_string()
+    } else {
+        day.date.clone()
+    };
+
     container(
         column![
-            text(day.date.clone()).size(13).font(BOLD),
+            text(date_label).size(13).font(BOLD).style(if is_today {
+                style::accent
+            } else {
+                style::default_text
+            }),
             icons::view(day.symbol, 48.0),
             text(format!(
                 "{:.0}\u{b0} / {:.0}\u{b0}",
@@ -58,6 +75,10 @@ fn day_card(day: &ForecastDay) -> Element<'_, Message> {
         .width(100),
     )
     .padding(10)
-    .style(style::day_card)
+    .style(if is_today {
+        style::day_card_today
+    } else {
+        style::day_card
+    })
     .into()
 }
