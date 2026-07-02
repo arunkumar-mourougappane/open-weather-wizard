@@ -101,6 +101,15 @@ pub fn load_embedded_image(asset_path: &str) -> Option<iced::widget::image::Hand
         .map(|file| iced::widget::image::Handle::from_bytes(file.data.into_owned()))
 }
 
+/// Loads an embedded PNG asset (e.g. `assets/icon/icon.png`) as an
+/// `iced::window::Icon`, for `window::Settings::icon` (Dock/taskbar icon).
+pub fn load_window_icon(asset_path: &str) -> Option<iced::window::Icon> {
+    let file = WeatherIconsAsset::get(asset_path)?;
+    let rgba = image::load_from_memory(file.data.as_ref()).ok()?.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    iced::window::icon::from_rgba(rgba.into_raw(), width, height).ok()
+}
+
 /// Maps the subset of `WeatherSymbol`s that have a hand-authored Lottie
 /// animation to their `assets/lottie/*.json` path. Everything else falls
 /// back to the static SVG in `view()`.
