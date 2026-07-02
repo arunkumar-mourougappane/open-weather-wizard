@@ -9,7 +9,7 @@ use iced::widget::{column, container, row, scrollable, text};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{ForecastStatus, Message};
-use crate::ui::icons;
+use crate::ui::{icons, style};
 use crate::weather_api::forecast::ForecastDay;
 
 const BOLD: Font = Font {
@@ -43,19 +43,21 @@ pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
 fn day_card(day: &ForecastDay) -> Element<'_, Message> {
     container(
         column![
-            text(day.date.clone()).size(14).font(BOLD),
+            text(day.date.clone()).size(13).font(BOLD),
             icons::view(day.symbol, 48.0),
             text(format!(
                 "{:.0}\u{b0} / {:.0}\u{b0}",
                 day.temp_max, day.temp_min
             ))
-            .size(14),
-            text(day.description.clone()).size(12),
+            .size(14)
+            .font(BOLD),
+            text(day.description.clone()).size(12).style(style::muted),
         ]
-        .spacing(4)
+        .spacing(6)
         .align_x(Alignment::Center)
-        .width(96),
+        .width(100),
     )
-    .padding(8)
+    .padding(10)
+    .style(style::day_card)
     .into()
 }

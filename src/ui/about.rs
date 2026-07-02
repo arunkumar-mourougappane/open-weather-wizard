@@ -5,31 +5,45 @@
 //! previous GTK `AboutDialog`.
 
 use iced::widget::{column, container, image, text};
-use iced::{Alignment, Element, Length};
+use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::Message;
-use crate::ui::icons;
+use crate::ui::{icons, style};
+
+const BOLD: Font = Font {
+    weight: font::Weight::Bold,
+    ..Font::DEFAULT
+};
 
 pub fn view<'a>() -> Element<'a, Message> {
     let authors_env = env!("CARGO_PKG_AUTHORS");
     let authors: Vec<&str> = authors_env.split(':').collect();
 
-    let mut content = column![].spacing(8).align_x(Alignment::Center);
+    let mut content = column![].spacing(10).align_x(Alignment::Center);
 
     if let Some(handle) = icons::load_embedded_image("icon/icon.png") {
         content = content.push(image(handle).width(64).height(64));
     }
 
     content = content
-        .push(text("Weather Wizard").size(20))
-        .push(text(format!("v{}", env!("CARGO_PKG_VERSION"))))
+        .push(
+            text("Weather Wizard")
+                .size(20)
+                .font(BOLD)
+                .style(style::accent),
+        )
+        .push(text(format!("v{}", env!("CARGO_PKG_VERSION"))).style(style::muted))
         .push(text(authors.join(", ")))
-        .push(text("MIT License"))
-        .push(text(env!("CARGO_PKG_HOMEPAGE")).size(12));
+        .push(text("MIT License").style(style::muted))
+        .push(
+            text(env!("CARGO_PKG_HOMEPAGE"))
+                .size(12)
+                .style(style::muted),
+        );
 
     container(content)
         .width(Length::Fill)
         .center_x(Length::Fill)
-        .padding(20)
+        .padding(24)
         .into()
 }

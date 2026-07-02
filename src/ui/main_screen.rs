@@ -4,11 +4,11 @@
 //! description, and humidity, plus Loading/Error states. This is the content of
 //! the app's main window (see `src/app.rs::view`).
 
-use iced::widget::{button, column, container, row, space, text};
-use iced::{Alignment, Color, Element, Font, Length, font};
+use iced::widget::{button, column, container, row, scrollable, space, text};
+use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{AppState, Message, WeatherStatus};
-use crate::ui::{forecast_row, icons};
+use crate::ui::{forecast_row, icons, style};
 use crate::weather_api::openweather_api::get_weather_symbol;
 
 const BOLD: Font = Font {
@@ -23,19 +23,29 @@ const ITALIC: Font = Font {
 
 pub fn view(state: &AppState) -> Element<'_, Message> {
     let toolbar = row![
-        text("Weather Wizard").size(20).font(BOLD),
+        text("Weather Wizard")
+            .size(20)
+            .font(BOLD)
+            .style(style::accent),
         space::horizontal(),
-        button("Preferences").on_press(Message::OpenPreferences),
-        button("About").on_press(Message::OpenAbout),
+        button("Preferences")
+            .on_press(Message::OpenPreferences)
+            .style(style::secondary_button),
+        button("About")
+            .on_press(Message::OpenAbout)
+            .style(style::secondary_button),
     ]
     .spacing(8)
     .align_y(Alignment::Center);
 
     let content: Element<'_, Message> = match &state.weather {
-        WeatherStatus::Loading => text("Fetching weather...").size(18).into(),
+        WeatherStatus::Loading => text("Fetching weather...")
+            .size(18)
+            .style(style::muted)
+            .into(),
         WeatherStatus::Error(message) => text(format!("Error: {}", message))
             .size(16)
-            .color(Color::from_rgb(0.8, 0.1, 0.1))
+            .style(style::danger)
             .into(),
         WeatherStatus::Loaded(weather_data) => {
             let Some(weather) = weather_data.weather.first() else {
@@ -53,12 +63,15 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                 icons::view(symbol, 128.0),
                 text(location_text).size(24).font(BOLD),
                 text(format!("{:.1}\u{b0}C", weather_data.main.temp))
-                    .size(30)
-                    .font(BOLD),
+                    .size(34)
+                    .font(BOLD)
+                    .style(style::accent),
                 text(weather.description.clone()).size(18).font(ITALIC),
-                text(format!("Humidity: {}%", weather_data.main.humidity)).size(14),
+                text(format!("Humidity: {}%", weather_data.main.humidity))
+                    .size(14)
+                    .style(style::muted),
             ]
-            .spacing(6)
+            .spacing(8)
             .align_x(Alignment::Center)
             .into()
         }
@@ -69,14 +82,20 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         container(content)
             .width(Length::Fill)
             .center_x(Length::Fill)
-            .padding(20),
+            .padding(24)
+            .style(style::panel),
     ]
-    .spacing(12)
-    .padding(12);
+    .spacing(16)
+    .padding(16);
 
     if let Some(forecast) = forecast_row::view(&state.forecast) {
         layout = layout.push(forecast);
     }
 
-    layout.into()
+    // If the window is shorter than the content needs (a narrow custom resize,
+    // or a display with unusual scaling), scroll instead of letting iced
+    // silently squeeze fixed-size widgets like the animated icons into
+    // whatever space is left -- that squeeze is what actually distorted them,
+    // not the icons' own sizing.
+    scrollable(layout).height(Length::Fill).into()
 }
