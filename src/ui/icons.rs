@@ -5,9 +5,9 @@
 //! embedded asset table on the hot render path.
 //!
 //! Every condition also has a hand-authored Lottie animation (`assets/lottie/*.json`,
-//! shapes/motion adapted from the reference CSS-animated icons in `assets/animated/`);
-//! `view()` dispatches to the animated `lottie` widget and only falls back to the
-//! static SVG if a composition fails to load.
+//! shapes/motion adapted from the upstream `animated/` icon set's CSS keyframes --
+//! see `docs/ICON_MAPPING.md`); `view()` dispatches to the animated `lottie` widget
+//! and only falls back to the static SVG if a composition fails to load.
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
@@ -25,10 +25,9 @@ use crate::weather_api::openweather_api::WeatherSymbol;
 #[folder = "assets/"]
 struct WeatherIconsAsset;
 
-/// Maps a `WeatherSymbol` to its corresponding static SVG asset path.
-///
-/// Phase A renders icons statically (`assets/static/`); `assets/animated/` holds the
-/// same set with CSS `@keyframes` reserved for the Phase C Lottie-authoring reference.
+/// Maps a `WeatherSymbol` to its corresponding static SVG asset path
+/// (`assets/static/`), used as the fallback if a symbol's Lottie
+/// composition fails to load.
 fn asset_path(symbol: WeatherSymbol) -> &'static str {
     match symbol {
         WeatherSymbol::Clear => "static/clear-day.svg",

@@ -10,12 +10,9 @@ readme = "README.md"
 license = "MIT"
 keywords = ["weather", "gui", "iced", "desktop", "forecast"]
 categories = ["gui"]
-# assets/animated/*.svg are CSS-animated reference material the Lottie set
-# (assets/lottie/) was authored from -- not looked up or embedded at
-# runtime, so excluding them keeps the published crate lean.
 # examples/lottie_spike.rs is a throwaway prototype (see its own doc
 # comment), not a usage example.
-exclude = ["assets/animated/*", "examples/lottie_spike.rs"]
+exclude = ["examples/lottie_spike.rs"]
 
 [dependencies]
 env_logger = "0.11.8"
