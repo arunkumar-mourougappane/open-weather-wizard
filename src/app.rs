@@ -112,6 +112,10 @@ pub struct AppState {
     /// `ui::transition`. Noted in `update()` on fetch success, read (never
     /// mutated) by view code.
     pub value_tracker: transition::ValueTracker,
+    /// Index into `forecast`'s days when the main card is showing that
+    /// day's detail instead of live current conditions. `None` (the
+    /// default) shows live conditions. See `Message::ForecastDaySelected`.
+    pub selected_forecast_day: Option<usize>,
     main_window: window::Id,
     prefs_window: Option<window::Id>,
     prefs_state: Option<preferences::State>,
@@ -130,6 +134,10 @@ pub enum Message {
     WindowCloseRequested(window::Id),
     AnimationTick,
     OpenUrl(String),
+    /// Tapping a forecast day card. Toggles: selecting the same index again,
+    /// or index `0` ("Today", redundant with the live current-conditions
+    /// view), clears the selection back to live conditions.
+    ForecastDaySelected(usize),
 
     Preferences(preferences::Message),
 }
@@ -250,6 +258,7 @@ pub fn boot() -> (AppState, Task<Message>) {
         forecast: ForecastStatus::Loading,
         last_updated: None,
         value_tracker: transition::ValueTracker::default(),
+        selected_forecast_day: None,
         main_window,
         prefs_window: None,
         prefs_state: None,
@@ -318,6 +327,14 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 &response,
                 state.config.use_fahrenheit,
             );
+            // A stale selection (e.g. a provider that now returns fewer
+            // days) would otherwise panic-free but silently index into
+            // nothing meaningful -- clear it back to the live view instead.
+            if let Some(index) = state.selected_forecast_day
+                && index >= response.days.len()
+            {
+                state.selected_forecast_day = None;
+            }
             state.forecast = ForecastStatus::Loaded(response);
             Task::none()
         }
@@ -365,6 +382,15 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             open_task.discard()
         }
         Message::AnimationTick => Task::none(),
+        Message::ForecastDaySelected(index) => {
+            state.selected_forecast_day =
+                if index == 0 || state.selected_forecast_day == Some(index) {
+                    None
+                } else {
+                    Some(index)
+                };
+            Task::none()
+        }
         Message::OpenUrl(url) => {
             if let Err(e) = open::that(&url) {
                 log::warn!("Failed to open URL {url}: {e}");

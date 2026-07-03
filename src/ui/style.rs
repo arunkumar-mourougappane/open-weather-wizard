@@ -28,6 +28,7 @@ pub const STAT_VISIBILITY: Color = Color::from_rgb(0.40, 0.46, 0.56);
 pub const STAT_RANGE: Color = Color::from_rgb(0.87, 0.55, 0.18);
 pub const STAT_SUNRISE: Color = Color::from_rgb(0.90, 0.62, 0.12);
 pub const STAT_SUNSET: Color = Color::from_rgb(0.46, 0.34, 0.64);
+pub const STAT_POP: Color = Color::from_rgb(0.24, 0.52, 0.80);
 
 /// The main content panel behind the current-conditions display: a card in
 /// the theme's base background/border colors with a faint shadow, lifting
@@ -75,6 +76,22 @@ pub fn day_card_today(theme: &Theme) -> container::Style {
 
     container::Style {
         background: Some(Background::Color(palette.background.weak.color)),
+        border: Border {
+            color: ACCENT,
+            width: 2.0,
+            radius: 10.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
+/// The forecast card currently expanded into the main panel's detail view:
+/// a tinted accent wash (rather than `day_card_today`'s outline-only
+/// treatment) so "this card is driving the panel above" reads as visually
+/// distinct from "this card is today."
+pub fn day_card_selected(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(Color { a: 0.14, ..ACCENT })),
         border: Border {
             color: ACCENT,
             width: 2.0,

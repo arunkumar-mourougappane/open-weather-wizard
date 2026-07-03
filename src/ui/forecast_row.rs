@@ -7,7 +7,7 @@
 //! mock) gets an explicit muted hint rather than the row just silently
 //! vanishing, which otherwise reads as a bug rather than a provider limitation.
 
-use iced::widget::{column, container, responsive, row, scrollable, text};
+use iced::widget::{column, container, mouse_area, responsive, row, scrollable, text};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{ForecastStatus, Message};
@@ -50,6 +50,7 @@ pub fn view<'a>(
     forecast: &'a ForecastStatus,
     use_fahrenheit: bool,
     tracker: &'a ValueTracker,
+    selected: Option<usize>,
 ) -> Option<Element<'a, Message>> {
     match forecast.data() {
         None => None,
@@ -74,9 +75,9 @@ pub fn view<'a>(
             Some(
                 responsive(move |size| {
                     let cards = || {
-                        days.iter()
-                            .enumerate()
-                            .map(|(index, day)| day_card(day, index, use_fahrenheit, tracker))
+                        days.iter().enumerate().map(|(index, day)| {
+                            day_card(day, index, use_fahrenheit, tracker, selected)
+                        })
                     };
 
                     if cards_width(days.len()) <= size.width {
@@ -109,8 +110,10 @@ fn day_card<'a>(
     index: usize,
     use_fahrenheit: bool,
     tracker: &'a ValueTracker,
+    selected: Option<usize>,
 ) -> Element<'a, Message> {
     let is_today = index == 0;
+    let is_selected = selected == Some(index);
     let date_label = if is_today {
         "Today".to_string()
     } else {
@@ -121,13 +124,16 @@ fn day_card<'a>(
     let temp_max = celsius_to_display(day.temp_max, use_fahrenheit);
     let temp_min = celsius_to_display(day.temp_min, use_fahrenheit);
 
-    container(
+    let card = container(
         column![
-            text(date_label).size(13).font(BOLD).style(if is_today {
-                style::accent
-            } else {
-                style::default_text
-            }),
+            text(date_label)
+                .size(13)
+                .font(BOLD)
+                .style(if is_today || is_selected {
+                    style::accent
+                } else {
+                    style::default_text
+                }),
             icons::view(day.symbol, 48.0),
             tracker.cross_fade(
                 &format!("forecast_{index}_hilo"),
@@ -151,8 +157,20 @@ fn day_card<'a>(
     .padding(10)
     .style(if is_today {
         style::day_card_today
+    } else if is_selected {
+        style::day_card_selected
     } else {
         style::day_card
-    })
-    .into()
+    });
+
+    // Today's card intentionally has no click handler: tapping it would be
+    // a no-op (it's already what the live view shows), and `Message::
+    // ForecastDaySelected(0)` is reserved as the "deselect" toggle.
+    if is_today {
+        card.into()
+    } else {
+        mouse_area(card)
+            .on_press(Message::ForecastDaySelected(index))
+            .into()
+    }
 }
