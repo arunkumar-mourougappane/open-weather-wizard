@@ -58,7 +58,8 @@ SVGs — there's no reliable automated CSS-animation → Lottie converter, and
 reverse-engineering the existing `@keyframes` blocks by hand was accurate
 enough at this simple a level of animation. Each reuses the transform *type*
 (rotate / translate / opacity) and rough magnitude from the corresponding
-SVG in `assets/animated/`, not literal keyframe values.
+SVG in the upstream `animated/` set (see Licensing below), not literal
+keyframe values.
 
 Every cloud-based composition (`clouds`, `rain`, `drizzle`, `thunderstorm`)
 builds its cloud from several overlapping ellipses that **must share one
@@ -86,12 +87,16 @@ current SVG-derived set specifically).
 
 ## Licensing / attribution
 
-The icon set in `assets/animated/` and `assets/static/` (the *unanimated
-counterparts*, still used as the fallback for every non-Lottie condition) is
-sourced from [amCharts' free animated SVG weather
+The icon set in `assets/static/` (still used as the fallback for every
+non-Lottie condition) is sourced from [amCharts' free animated SVG weather
 icons](https://www.amcharts.com/free-animated-svg-weather-icons/) via the
 [Makin-Things/weather-icons](https://github.com/Makin-Things/weather-icons)
 repository. Re-run `get_weather_icons.sh` to refresh from upstream.
+
+The upstream repository's `animated/` set (CSS `@keyframes`-based, only ever
+used here as a reference while hand-authoring `assets/lottie/*.json` — see
+above) was removed once the Lottie set covered every `WeatherSymbol`; it's
+no longer fetched or tracked.
 
 The `assets/lottie/*.json` files are original work for this project
 (hand-authored, not derived from or embedding the amCharts assets), licensed
