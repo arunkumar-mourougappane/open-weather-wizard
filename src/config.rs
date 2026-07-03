@@ -62,6 +62,12 @@ pub struct AppConfig {
     /// still load (missing -> `false`, i.e. light mode) instead of failing.
     #[serde(default)]
     pub dark_mode: bool,
+    /// `#[serde(default)]` so config files saved before this field existed
+    /// still load (missing -> `false`, i.e. Celsius). Conversion happens at
+    /// display time in the UI layer -- the API is always fetched in metric,
+    /// so toggling this doesn't trigger a re-fetch.
+    #[serde(default)]
+    pub use_fahrenheit: bool,
 }
 
 impl Default for AppConfig {
@@ -72,6 +78,7 @@ impl Default for AppConfig {
             api_token_encoded: STANDARD.encode("REDACTED-OPENWEATHERMAP-API-KEY"),
             location: LocationConfig::default(),
             dark_mode: false,
+            use_fahrenheit: false,
         }
     }
 }

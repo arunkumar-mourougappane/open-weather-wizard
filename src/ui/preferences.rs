@@ -31,6 +31,7 @@ pub struct State {
     pub state_input: String,
     pub country_input: String,
     pub dark_mode: bool,
+    pub use_fahrenheit: bool,
 }
 
 impl State {
@@ -42,6 +43,7 @@ impl State {
             state_input: config.location.state.clone(),
             country_input: config.location.country.clone(),
             dark_mode: config.dark_mode,
+            use_fahrenheit: config.use_fahrenheit,
         }
     }
 
@@ -55,6 +57,7 @@ impl State {
         config.location.state = self.state_input.clone();
         config.location.country = self.country_input.clone();
         config.dark_mode = self.dark_mode;
+        config.use_fahrenheit = self.use_fahrenheit;
     }
 
     /// Field-level problems that must be fixed before `Save` is allowed.
@@ -87,6 +90,7 @@ pub enum Message {
     StateChanged(String),
     CountryChanged(String),
     DarkModeToggled(bool),
+    UnitsToggled(bool),
     Save,
     Cancel,
 }
@@ -101,6 +105,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::StateChanged(value) => state.state_input = value,
         Message::CountryChanged(value) => state.country_input = value,
         Message::DarkModeToggled(value) => state.dark_mode = value,
+        Message::UnitsToggled(value) => state.use_fahrenheit = value,
         Message::Save | Message::Cancel => {
             // Handled by the parent; nothing to do locally.
         }
@@ -160,10 +165,16 @@ pub fn view(state: &State) -> Element<'_, Message> {
 
     let appearance_section = section(
         "Appearance",
-        toggler(state.dark_mode)
-            .label("Dark mode")
-            .on_toggle(Message::DarkModeToggled)
-            .into(),
+        column![
+            toggler(state.dark_mode)
+                .label("Dark mode")
+                .on_toggle(Message::DarkModeToggled),
+            toggler(state.use_fahrenheit)
+                .label("Use Fahrenheit (\u{b0}F)")
+                .on_toggle(Message::UnitsToggled),
+        ]
+        .spacing(12)
+        .into(),
     );
 
     let errors = state.validation_errors();

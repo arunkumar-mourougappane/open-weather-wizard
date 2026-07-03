@@ -11,6 +11,7 @@ use iced::widget::{column, container, responsive, row, scrollable, text};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{ForecastStatus, Message};
+use crate::ui::temperature::{celsius_to_display, unit_symbol};
 use crate::ui::{icons, style};
 use crate::weather_api::forecast::ForecastDay;
 
@@ -42,7 +43,7 @@ const ROW_HEIGHT: f32 = 140.0;
 
 /// Renders the forecast row, or `None` if there's nothing to show at all
 /// (loading with no prior data yet, or an error).
-pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
+pub fn view(forecast: &ForecastStatus, use_fahrenheit: bool) -> Option<Element<'_, Message>> {
     match forecast {
         ForecastStatus::Loading => None,
         ForecastStatus::Error => None,
@@ -69,7 +70,7 @@ pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
                     let cards = || {
                         days.iter()
                             .enumerate()
-                            .map(|(index, day)| day_card(day, index == 0))
+                            .map(|(index, day)| day_card(day, index == 0, use_fahrenheit))
                     };
 
                     if cards_width(days.len()) <= size.width {
@@ -97,12 +98,16 @@ pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
     }
 }
 
-fn day_card(day: &ForecastDay, is_today: bool) -> Element<'_, Message> {
+fn day_card(day: &ForecastDay, is_today: bool, use_fahrenheit: bool) -> Element<'_, Message> {
     let date_label = if is_today {
         "Today".to_string()
     } else {
         day.date.clone()
     };
+
+    let unit = unit_symbol(use_fahrenheit);
+    let temp_max = celsius_to_display(day.temp_max, use_fahrenheit);
+    let temp_min = celsius_to_display(day.temp_min, use_fahrenheit);
 
     container(
         column![
@@ -112,12 +117,9 @@ fn day_card(day: &ForecastDay, is_today: bool) -> Element<'_, Message> {
                 style::default_text
             }),
             icons::view(day.symbol, 48.0),
-            text(format!(
-                "{:.0}\u{b0} / {:.0}\u{b0}",
-                day.temp_max, day.temp_min
-            ))
-            .size(14)
-            .font(BOLD),
+            text(format!("{:.0}{unit} / {:.0}{unit}", temp_max, temp_min))
+                .size(14)
+                .font(BOLD),
             text(day.description.clone()).size(12).style(style::muted),
         ]
         .spacing(6)

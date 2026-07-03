@@ -30,6 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             country: "UK".to_string(),
         },
         dark_mode: false,
+        use_fahrenheit: false,
     };
 
     // Use the original API key for testing
