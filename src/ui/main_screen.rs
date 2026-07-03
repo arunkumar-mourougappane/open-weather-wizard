@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use iced::widget::{button, column, container, row, scrollable, space, text};
+use iced::widget::{button, column, container, row, scrollable, space, text, tooltip};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{AppState, Message, WeatherStatus};
@@ -36,15 +36,13 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         // Disabled while a fetch is already in flight, both to avoid
         // piling up redundant requests and as a small "yes, it's working"
         // signal beyond the spinner in the panel below.
-        button("Refresh")
-            .on_press_maybe((!is_refreshing).then_some(Message::RefreshRequested))
-            .style(style::secondary_button),
-        button("Preferences")
-            .on_press(Message::OpenPreferences)
-            .style(style::secondary_button),
-        button("About")
-            .on_press(Message::OpenAbout)
-            .style(style::secondary_button),
+        toolbar_button(
+            "\u{21bb}",
+            "Refresh",
+            (!is_refreshing).then_some(Message::RefreshRequested),
+        ),
+        toolbar_button("\u{2699}", "Preferences", Some(Message::OpenPreferences)),
+        toolbar_button("\u{24d8}", "About", Some(Message::OpenAbout)),
     ]
     .spacing(8)
     .align_y(Alignment::Center);
@@ -132,6 +130,24 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     // whatever space is left -- that squeeze is what actually distorted them,
     // not the icons' own sizing.
     scrollable(layout).height(Length::Fill).into()
+}
+
+/// A square icon-only toolbar button, with the action's name shown in a
+/// hover tooltip since a bare glyph alone isn't self-explanatory.
+fn toolbar_button<'a>(
+    glyph: &'a str,
+    label: &'a str,
+    on_press: Option<Message>,
+) -> Element<'a, Message> {
+    let btn = button(text(glyph).size(18).align_x(Alignment::Center))
+        .width(36)
+        .height(36)
+        .on_press_maybe(on_press)
+        .style(style::secondary_button);
+
+    tooltip(btn, text(label).size(12), tooltip::Position::Bottom)
+        .style(style::panel)
+        .into()
 }
 
 /// Formats "Updated just now" / "Updated Xm ago" from the last successful
