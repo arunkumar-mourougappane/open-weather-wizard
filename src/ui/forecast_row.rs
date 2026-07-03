@@ -12,6 +12,7 @@ use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{ForecastStatus, Message};
 use crate::ui::temperature::{celsius_to_display, unit_symbol};
+use crate::ui::transition::ValueTracker;
 use crate::ui::{icons, style};
 use crate::weather_api::forecast::ForecastDay;
 
@@ -45,7 +46,11 @@ pub(crate) const ROW_HEIGHT: f32 = 140.0;
 
 /// Renders the forecast row, or `None` if there's nothing to show at all
 /// (loading with no prior data yet, or an error).
-pub fn view(forecast: &ForecastStatus, use_fahrenheit: bool) -> Option<Element<'_, Message>> {
+pub fn view<'a>(
+    forecast: &'a ForecastStatus,
+    use_fahrenheit: bool,
+    tracker: &'a ValueTracker,
+) -> Option<Element<'a, Message>> {
     match forecast.data() {
         None => None,
         Some(response) if response.days.is_empty() => Some(
@@ -71,7 +76,7 @@ pub fn view(forecast: &ForecastStatus, use_fahrenheit: bool) -> Option<Element<'
                     let cards = || {
                         days.iter()
                             .enumerate()
-                            .map(|(index, day)| day_card(day, index == 0, use_fahrenheit))
+                            .map(|(index, day)| day_card(day, index, use_fahrenheit, tracker))
                     };
 
                     if cards_width(days.len()) <= size.width {
@@ -99,7 +104,13 @@ pub fn view(forecast: &ForecastStatus, use_fahrenheit: bool) -> Option<Element<'
     }
 }
 
-fn day_card(day: &ForecastDay, is_today: bool, use_fahrenheit: bool) -> Element<'_, Message> {
+fn day_card<'a>(
+    day: &'a ForecastDay,
+    index: usize,
+    use_fahrenheit: bool,
+    tracker: &'a ValueTracker,
+) -> Element<'a, Message> {
+    let is_today = index == 0;
     let date_label = if is_today {
         "Today".to_string()
     } else {
@@ -118,10 +129,20 @@ fn day_card(day: &ForecastDay, is_today: bool, use_fahrenheit: bool) -> Element<
                 style::default_text
             }),
             icons::view(day.symbol, 48.0),
-            text(format!("{:.0}{unit} / {:.0}{unit}", temp_max, temp_min))
-                .size(14)
-                .font(BOLD),
-            text(day.description.clone()).size(12).style(style::muted),
+            tracker.cross_fade(
+                &format!("forecast_{index}_hilo"),
+                format!("{:.0}{unit} / {:.0}{unit}", temp_max, temp_min),
+                14,
+                BOLD,
+                style::default_text,
+            ),
+            tracker.cross_fade(
+                &format!("forecast_{index}_desc"),
+                day.description.clone(),
+                12,
+                Font::DEFAULT,
+                style::muted,
+            ),
         ]
         .spacing(6)
         .align_x(Alignment::Center)
