@@ -1,7 +1,8 @@
 # Icon Mapping
 
-How an OpenWeatherMap condition string becomes an on-screen icon, and which
-subset of conditions get real animation vs. a static image.
+How an OpenWeatherMap condition string becomes an on-screen icon. Every
+`WeatherSymbol` now has a hand-authored Lottie animation; the static SVGs
+remain only as a fallback if a composition somehow fails to load.
 
 ## Condition string → `WeatherSymbol`
 
@@ -29,61 +30,56 @@ the GTK version) maps OpenWeatherMap's `weather[].main` string to one of:
 
 ## `WeatherSymbol` → icon
 
-`src/ui/icons.rs::view(symbol, size)` dispatches per symbol:
+`src/ui/icons.rs::view(symbol, size)` dispatches per symbol to its own
+`assets/lottie/*.json` composition; conditions without a visually distinct
+animation of their own share the closest match:
 
-| `WeatherSymbol` | Animated (Lottie)? | Static SVG (`assets/static/`) |
-|---|---|---|
-| `Clear` | ✅ `lottie/sun.json` | `clear-day.svg` (fallback only) |
-| `Clouds` | ✅ `lottie/clouds.json` | `cloudy-2-day.svg` (fallback only) |
-| `Rain` | ✅ `lottie/rain.json` | `rainy-3.svg` (fallback only) |
-| `Snow` | ✅ `lottie/snow.json` | `snowy-2.svg` (fallback only) |
-| `Drizzle` | — | `rainy-1.svg` |
-| `Thunderstorm` | — | `thunderstorms.svg` |
-| `Mist` | — | `fog.svg` |
-| `Smoke` | — | `fog.svg` |
-| `Haze` | — | `haze.svg` |
-| `Dust` | — | `dust.svg` |
-| `Fog` | — | `fog.svg` |
-| `Sand` | — | `dust.svg` |
-| `Ash` | — | `dust.svg` |
-| `Squall` | — | `wind.svg` |
-| `Tornado` | — | `tornado.svg` |
-| `Default` | — | `cloudy.svg` |
+| `WeatherSymbol` | Lottie composition |
+|---|---|
+| `Clear` | `sun.json` |
+| `Clouds`, `Default` | `clouds.json` |
+| `Rain` | `rain.json` |
+| `Drizzle` | `drizzle.json` |
+| `Thunderstorm` | `thunderstorm.json` |
+| `Snow` | `snow.json` |
+| `Mist`, `Smoke`, `Fog` | `fog.json` |
+| `Haze`, `Dust`, `Sand`, `Ash` | `haze.json` |
+| `Squall` | `wind.json` |
+| `Tornado` | `tornado.json` |
 
-The four animated conditions cover the most common real-world weather, on
-the theory that they're worth the authoring effort first; the rest render as
-a static SVG (`iced::widget::svg`, no CSS-animation support, same limitation
-the GTK version had via `librsvg`).
+The static SVGs under `assets/static/` (mapped 1:1 per `WeatherSymbol` in
+`icons::asset_path`) are only ever used as a fallback, if a composition
+somehow fails to load at startup.
 
 ## Animated icon authoring
 
-`assets/lottie/{sun,clouds,rain,snow}.json` are hand-authored, not converted
-from the existing SVGs — there's no reliable automated CSS-animation →
-Lottie converter, and reverse-engineering the existing `@keyframes` blocks by
-hand was accurate enough at this simple a level of animation. Each reuses the
-transform *type* (rotate / translate / opacity) and rough magnitude from the
-corresponding SVG in `assets/animated/`, not literal keyframe values:
+`assets/lottie/*.json` are hand-authored, not converted from the existing
+SVGs — there's no reliable automated CSS-animation → Lottie converter, and
+reverse-engineering the existing `@keyframes` blocks by hand was accurate
+enough at this simple a level of animation. Each reuses the transform *type*
+(rotate / translate / opacity) and rough magnitude from the corresponding
+SVG in `assets/animated/`, not literal keyframe values.
 
-| Icon | Technique | Reference `@keyframes` (`assets/animated/`) |
-|---|---|---|
-| `sun.json` | Whole-layer rotation, 0°→360°, linear, looping | `am-weather-sun` in `clear-day.svg` (0°→360° over 9s) |
-| `clouds.json` | Position ping-pong (3 keyframes: start → +16px → start) | `am-weather-cloud-2` in `cloudy-2-day.svg` (`translate(0,0)` → `translate(2px,0)` → back) |
-| `rain.json` | Per-drop vertical fall (linear, wraps via the player's modulo loop — see below) | `am-weather-rain` in `rainy-3.svg` (`stroke-dashoffset` animation; a different SVG-specific technique, approximated here as falling shapes) |
-| `snow.json` | Per-flake zigzag fall (3 intermediate keyframes) | `am-weather-snow` in `snowy-2.svg` (33%/66%/100% `translateX`/`translateY` zigzag) |
+Every cloud-based composition (`clouds`, `rain`, `drizzle`, `thunderstorm`)
+builds its cloud from several overlapping ellipses that **must share one
+fill color** — the first pass used a different shade per lobe, which read as
+stacked flat ovals with visible seams instead of one fluffy shape. Rain and
+drizzle drops are teardrop-shaped bezier paths (`"ty": "sh"`, straight
+in/out tangents for the point, a rounded arc for the base) with staggered,
+opacity-faded fall cycles per drop, rather than all drops falling in lockstep
+and popping back to the top in sync.
 
 `lottie::frame_at` (`src/ui/lottie/mod.rs`) computes the current frame as
 `start + (elapsed * frame_rate) % duration` — a hard wrap back to frame 0,
-not a bounce. That's why `rain.json`/`snow.json` are authored as a single
-linear fall from top to bottom rather than a there-and-back loop: the wrap
-itself produces the "restart from the top" effect a real rain/snow loop
-wants, with no extra keyframes needed. `sun.json`'s 0°→360° rotation wraps
-seamlessly for the same reason (0° and 360° are the same orientation).
-`clouds.json` is the one animation that *needs* an explicit return-to-start
-keyframe, since a directional sway would visibly jump-cut on wrap otherwise.
+not a bounce. Any shape whose position/opacity differs between its first and
+last keyframe will visibly snap at that wrap; the fix used throughout this
+set is to fade a shape's opacity to zero before the wrap point (e.g. each
+rain/drizzle drop) rather than try to keep every property continuous across
+the loop boundary.
 
 These are simple, representative animations, not polished icon art — a
 reasonable next step if the visual bar needs to be higher is either
-hand-refining these four in a proper Lottie/After Effects authoring tool, or
+hand-refining these in a proper Lottie/After Effects authoring tool, or
 sourcing a licensed, professionally-produced Lottie weather icon pack (which
 would also mean revisiting the licensing note below, since it covers the
 current SVG-derived set specifically).
@@ -97,6 +93,6 @@ icons](https://www.amcharts.com/free-animated-svg-weather-icons/) via the
 [Makin-Things/weather-icons](https://github.com/Makin-Things/weather-icons)
 repository. Re-run `get_weather_icons.sh` to refresh from upstream.
 
-The four `assets/lottie/*.json` files are original work for this project
+The `assets/lottie/*.json` files are original work for this project
 (hand-authored, not derived from or embedding the amCharts assets), licensed
 under this repository's own license (see `LICENSE`).
