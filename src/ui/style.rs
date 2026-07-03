@@ -133,6 +133,23 @@ pub fn secondary_button(theme: &Theme, status: button::Status) -> button::Style 
     }
 }
 
+/// A borderless, backgroundless button for inline "links" (e.g. the
+/// homepage URL in the About window) -- just accent-colored text that
+/// darkens slightly on hover, no button chrome.
+pub fn link_button(_theme: &Theme, status: button::Status) -> button::Style {
+    let text_color = match status {
+        button::Status::Hovered | button::Status::Pressed => ACCENT_STRONG,
+        _ => ACCENT,
+    };
+
+    button::Style {
+        background: None,
+        text_color,
+        border: Border::default(),
+        ..button::Style::default()
+    }
+}
+
 /// A dimmer version of the theme's own text color, for secondary/supporting
 /// text (descriptions, timestamps, hints).
 pub fn muted(theme: &Theme) -> text::Style {
