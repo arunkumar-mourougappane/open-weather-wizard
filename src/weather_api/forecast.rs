@@ -10,7 +10,7 @@
 
 use serde::Deserialize;
 
-use crate::weather_api::openweather_api::{Main, Weather, WeatherSymbol, get_weather_symbol};
+use crate::weather_api::openweather_api::{Main, Weather, WeatherSymbol, Wind, get_weather_symbol};
 
 /// A single 3-hourly entry from OpenWeatherMap's `data/2.5/forecast` `list` array.
 #[derive(Deserialize, Debug)]
@@ -20,6 +20,12 @@ pub struct ForecastListItem {
     pub dt: i64,
     pub main: Main,
     pub weather: Vec<Weather>,
+    pub wind: Wind,
+    /// Probability of precipitation for this 3-hour window, 0.0-1.0.
+    pub pop: f64,
+    /// Meters; OpenWeatherMap caps this at 10000 ("10km+"), same as the
+    /// current-weather endpoint.
+    pub visibility: i64,
     /// e.g. "2026-07-02 15:00:00" (UTC). Used for daily bucketing.
     pub dt_txt: String,
 }
@@ -48,6 +54,30 @@ pub struct ForecastDay {
     pub temp_max: f64,
     pub description: String,
     pub symbol: WeatherSymbol,
+    /// Feels-like, humidity, wind, pressure, and visibility all come from
+    /// the same midday-or-mode-fallback `representative` entry `symbol`
+    /// and `description` already use, for a consistent "here's the
+    /// conditions for this day" snapshot rather than mixing readings from
+    /// different times of day. Not read yet -- the forecast-day detail view
+    /// that will display these is upcoming; `#[allow(dead_code)]` until then.
+    #[allow(dead_code)]
+    pub feels_like: f64,
+    #[allow(dead_code)]
+    pub humidity: i64,
+    #[allow(dead_code)]
+    pub wind_speed: f64,
+    #[allow(dead_code)]
+    pub wind_deg: i64,
+    #[allow(dead_code)]
+    pub pressure: i64,
+    #[allow(dead_code)]
+    pub visibility: i64,
+    /// Chance of rain for the day, 0.0-1.0 -- the **max** `pop` across all
+    /// of the day's 3-hourly entries (a single representative entry would
+    /// understate the day's actual risk; "will it rain at all today" reads
+    /// better as a worst-case summary than a snapshot).
+    #[allow(dead_code)]
+    pub pop: f64,
 }
 
 /// An app-level forecast, ready for the UI to render.
@@ -130,12 +160,21 @@ pub fn aggregate_daily(raw: RawForecastResponse) -> ForecastResponse {
             let dominant_condition = weather.map(|w| w.main.as_str()).unwrap_or("");
             let description = weather.map(|w| w.description.clone()).unwrap_or_default();
 
+            let pop = items.iter().map(|i| i.pop).fold(0.0, f64::max);
+
             Some(ForecastDay {
                 date: date.to_string(),
                 temp_min,
                 temp_max,
                 description,
                 symbol: get_weather_symbol(dominant_condition),
+                feels_like: representative.main.feels_like,
+                humidity: representative.main.humidity,
+                wind_speed: representative.wind.speed,
+                wind_deg: representative.wind.deg,
+                pressure: representative.main.pressure,
+                visibility: representative.visibility,
+                pop,
             })
         })
         .collect();
