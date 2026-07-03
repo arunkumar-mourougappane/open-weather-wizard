@@ -2,7 +2,7 @@
 name = "open-weather-wizard"
 version = "0.2.0"
 edition = "2024"
-authors = ["Arunkumar Mourougappane <amouroug@buffalo.edu>"]
+authors = ["Arunkumar Mourougappane <amouroug.dev@gmail.com>"]
 description = "A simple, elegant desktop weather app with animated Lottie icons, a 5-day forecast, and a silent cross-faded auto-refresh, built in Rust with iced."
 homepage = "https://github.com/arunkumar-mourougappane/open-weather-wizard"
 repository = "https://github.com/arunkumar-mourougappane/open-weather-wizard"
