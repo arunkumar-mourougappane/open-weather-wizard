@@ -4,9 +4,10 @@
 //! keyed by `WeatherSymbol`, eager-loaded once at startup so `view()` never touches the
 //! embedded asset table on the hot render path.
 //!
-//! A handful of conditions (`assets/lottie/*.json`) additionally have a hand-authored
-//! Lottie animation (Phase C); `view()` dispatches to the animated `lottie` widget for
-//! those and falls back to the static SVG for everything else.
+//! Every condition also has a hand-authored Lottie animation (`assets/lottie/*.json`,
+//! shapes/motion adapted from the reference CSS-animated icons in `assets/animated/`);
+//! `view()` dispatches to the animated `lottie` widget and only falls back to the
+//! static SVG if a composition fails to load.
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
@@ -110,16 +111,29 @@ pub fn load_window_icon(asset_path: &str) -> Option<iced::window::Icon> {
     iced::window::icon::from_rgba(rgba.into_raw(), width, height).ok()
 }
 
-/// Maps the subset of `WeatherSymbol`s that have a hand-authored Lottie
-/// animation to their `assets/lottie/*.json` path. Everything else falls
-/// back to the static SVG in `view()`.
+/// Maps every `WeatherSymbol` to its hand-authored `assets/lottie/*.json`
+/// animation. Conditions that don't have a visually distinct animation of
+/// their own share the closest match (e.g. Mist/Smoke/Fog all drift the same
+/// fog bands; Dust/Sand/Ash share the tinted haze bands) -- `view()` falls
+/// back to the static SVG only if a composition fails to load.
 fn lottie_asset_path(symbol: WeatherSymbol) -> Option<&'static str> {
     match symbol {
         WeatherSymbol::Clear => Some("lottie/sun.json"),
         WeatherSymbol::Clouds => Some("lottie/clouds.json"),
         WeatherSymbol::Rain => Some("lottie/rain.json"),
+        WeatherSymbol::Drizzle => Some("lottie/drizzle.json"),
+        WeatherSymbol::Thunderstorm => Some("lottie/thunderstorm.json"),
         WeatherSymbol::Snow => Some("lottie/snow.json"),
-        _ => None,
+        WeatherSymbol::Mist => Some("lottie/fog.json"),
+        WeatherSymbol::Smoke => Some("lottie/fog.json"),
+        WeatherSymbol::Haze => Some("lottie/haze.json"),
+        WeatherSymbol::Dust => Some("lottie/haze.json"),
+        WeatherSymbol::Fog => Some("lottie/fog.json"),
+        WeatherSymbol::Sand => Some("lottie/haze.json"),
+        WeatherSymbol::Ash => Some("lottie/haze.json"),
+        WeatherSymbol::Squall => Some("lottie/wind.json"),
+        WeatherSymbol::Tornado => Some("lottie/tornado.json"),
+        WeatherSymbol::Default => Some("lottie/clouds.json"),
     }
 }
 
@@ -150,8 +164,8 @@ static ANIMATED_COMPOSITIONS: LazyLock<HashMap<&'static str, Arc<velato::Composi
 static ANIMATION_START: LazyLock<Instant> = LazyLock::new(Instant::now);
 
 /// Renders the given weather symbol at `size` logical pixels square: the
-/// animated Lottie widget for symbols with a hand-authored composition
-/// (sun/clouds/rain/snow), the static SVG for everything else.
+/// animated Lottie widget for every symbol, falling back to the static SVG
+/// only if its composition somehow failed to load at startup.
 pub fn view<'a, Message: 'a>(symbol: WeatherSymbol, size: f32) -> Element<'a, Message> {
     if let Some(path) = lottie_asset_path(symbol)
         && let Some(composition) = ANIMATED_COMPOSITIONS.get(path)
