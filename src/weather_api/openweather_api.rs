@@ -38,7 +38,25 @@ pub struct Weather {
 pub struct Main {
     pub temp: f64,
     pub feels_like: f64,
+    pub temp_min: f64,
+    pub temp_max: f64,
+    pub pressure: i64,
     pub humidity: i64,
+}
+
+/// Wind speed (meters/sec, since requests use `units=metric`) and direction
+/// (meteorological degrees, 0 = due north).
+#[derive(Deserialize, Debug, Clone)]
+pub struct Wind {
+    pub speed: f64,
+    pub deg: i64,
+}
+
+/// Sunrise/sunset as Unix (UTC) timestamps.
+#[derive(Deserialize, Debug, Clone)]
+pub struct Sys {
+    pub sunrise: i64,
+    pub sunset: i64,
 }
 
 /// Represents the top-level structure of the JSON response from the OpenWeatherMap API.
@@ -46,10 +64,16 @@ pub struct Main {
 /// This struct aggregates the most relevant weather information, including a list of weather
 /// conditions, the main meteorological data like temperature and humidity, and the name of the city.
 #[derive(Deserialize, Debug, Clone)]
-#[allow(dead_code)]
 pub struct ApiResponse {
     pub weather: Vec<Weather>,
     pub main: Main,
+    pub wind: Wind,
+    /// Meters. OpenWeatherMap caps this at 10000 ("10km+").
+    pub visibility: i64,
+    pub sys: Sys,
+    /// Seconds offset from UTC for the queried location, used to render
+    /// sunrise/sunset in local time rather than UTC.
+    pub timezone: i64,
     pub name: String,
 }
 
