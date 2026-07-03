@@ -47,17 +47,20 @@ impl State {
         }
     }
 
-    /// Writes the edited fields back into the shared `AppConfig`.
-    pub fn apply_to(&self, config: &mut AppConfig) {
+    /// Writes the edited fields back into the shared `AppConfig`. Only
+    /// `set_api_token` (an OS keychain write) can actually fail -- everything
+    /// else here is an in-memory field assignment.
+    pub fn apply_to(&self, config: &mut AppConfig) -> Result<(), String> {
         config.weather_provider = self.provider.clone();
         if !self.token_input.is_empty() {
-            config.set_api_token(&self.token_input);
+            config.set_api_token(&self.token_input)?;
         }
         config.location.city = self.city_input.clone();
         config.location.state = self.state_input.clone();
         config.location.country = self.country_input.clone();
         config.dark_mode = self.dark_mode;
         config.use_fahrenheit = self.use_fahrenheit;
+        Ok(())
     }
 
     /// Field-level problems that must be fixed before `Save` is allowed.

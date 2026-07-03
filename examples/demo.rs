@@ -29,20 +29,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("1. Testing Configuration Management");
     println!("   Creating test configuration...");
 
-    let mut config = AppConfig {
-        weather_provider: WeatherApiProvider::GoogleWeather,
-        api_token_encoded: "".to_string(),
-        location: LocationConfig {
-            city: "San Francisco".to_string(),
-            state: "CA".to_string(),
-            country: "US".to_string(),
-        },
-        dark_mode: false,
-        use_fahrenheit: false,
+    let mut config = AppConfig::default();
+    config.weather_provider = WeatherApiProvider::GoogleWeather;
+    config.location = LocationConfig {
+        city: "San Francisco".to_string(),
+        state: "CA".to_string(),
+        country: "US".to_string(),
     };
 
-    config.set_api_token("demo_api_token_12345");
-    println!("   ✅ API token encoded and stored");
+    config.set_api_token("demo_api_token_12345")?;
+    println!("   ✅ API token stored securely in the OS keychain");
 
     let decoded_token = config.get_api_token()?;
     println!("   ✅ API token decoded: {}", decoded_token);
@@ -86,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n✅ All functionality tests completed successfully!");
     println!("\nKey Features Implemented:");
-    println!("• Configuration management with base64 API token encoding");
+    println!("• Configuration management with OS-keyring-backed API token storage");
     println!("• Weather API abstraction layer");
     println!("• Google Weather API mockup");
     println!("• OpenWeather API provider (with configurable API key)");

@@ -416,7 +416,15 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             let Some(prefs_state) = state.prefs_state.take() else {
                 return Task::none();
             };
-            prefs_state.apply_to(&mut state.config);
+            if let Err(e) = prefs_state.apply_to(&mut state.config) {
+                // A keychain write failed (locked keychain, no Secret
+                // Service running, etc.) -- put the form state back and
+                // leave the window open rather than closing it and silently
+                // discarding the token the user just typed in.
+                log::error!("Failed to save API token: {e}");
+                state.prefs_state = Some(prefs_state);
+                return Task::none();
+            }
             if let Err(e) = state.config_manager.save_config(&state.config) {
                 log::error!("Failed to save configuration: {}", e);
             } else {

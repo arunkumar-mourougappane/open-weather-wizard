@@ -1,12 +1,16 @@
 //!
 //! This example demonstrates how to use the OpenWeather API provider to fetch
 //! real-time weather data. It initializes a configuration for London, UK,
-//! creates an `OpenWeather` provider with a hardcoded API key, and then
-//! attempts to fetch and display the current weather conditions.
+//! creates an `OpenWeather` provider using an API key read from the
+//! `OPENWEATHER_API_KEY` environment variable, and then attempts to fetch
+//! and display the current weather conditions.
 //!
 //! This serves as a live integration test to verify that the OpenWeather API
-//! implementation is working correctly.
+//! implementation is working correctly. Run it with:
 //!
+//! ```sh
+//! OPENWEATHER_API_KEY=your-key-here cargo run --example openweather_test
+//! ```
 use open_weather_wizard::config::{AppConfig, LocationConfig, WeatherApiProvider};
 use open_weather_wizard::weather_api::weather_provider::WeatherProviderFactory;
 
@@ -20,25 +24,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("OpenWeather API Integration Test");
     println!("================================\n");
 
-    // Test OpenWeather API with the default key from the original app
-    let config = AppConfig {
-        weather_provider: WeatherApiProvider::OpenWeather,
-        api_token_encoded: "".to_string(),
-        location: LocationConfig {
-            city: "London".to_string(),
-            state: "".to_string(),
-            country: "UK".to_string(),
-        },
-        dark_mode: false,
-        use_fahrenheit: false,
+    let mut config = AppConfig::default();
+    config.weather_provider = WeatherApiProvider::OpenWeather;
+    config.location = LocationConfig {
+        city: "London".to_string(),
+        state: "".to_string(),
+        country: "UK".to_string(),
     };
 
-    // Use the original API key for testing
-    let api_key = "REDACTED-OPENWEATHERMAP-API-KEY";
+    // Never hardcode a real API key in source -- read it from the
+    // environment instead. This example is a live integration test, run
+    // manually by a developer who has their own key, not something CI
+    // executes automatically.
+    let api_key = std::env::var("OPENWEATHER_API_KEY").map_err(|_| {
+        "Set the OPENWEATHER_API_KEY environment variable to your own OpenWeatherMap API key \
+         before running this example (e.g. `OPENWEATHER_API_KEY=... cargo run --example openweather_test`)"
+    })?;
 
     println!("Testing OpenWeather API Provider...");
     println!("Location: London, UK");
-    println!("Using provided API key: {}...", &api_key[..8]);
+    println!(
+        "Using provided API key: {}...",
+        &api_key[..8.min(api_key.len())]
+    );
 
     let provider = WeatherProviderFactory::create_provider(
         &WeatherApiProvider::OpenWeather,

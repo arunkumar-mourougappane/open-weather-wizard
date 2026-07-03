@@ -6,16 +6,31 @@
 //! ## Key Components
 //!
 //! - **`AppConfig`**: The main struct representing all user-configurable settings,
-//!   including the chosen weather provider, location, and API token.
+//!   including the chosen weather provider and location. The API token is *not*
+//!   part of this struct's persisted data -- see API Token Handling below.
 //! - **`ConfigManager`**: A utility struct responsible for handling the file I/O
 //!   for loading from and saving to `config.json`.
-//! - **API Token Handling**: The `AppConfig` struct includes methods to set and get
-//!   the API token, which is stored in a base64-encoded format for basic obfuscation.
+//! - **API Token Handling**: The API token is stored in the OS's native secure
+//!   credential store (macOS Keychain, Windows Credential Manager, Linux Secret
+//!   Service) via the [`keyring`] crate, never written to disk in `config.json`.
+//!   Config files saved by older versions of this app had the token
+//!   base64-"encoded" (not encrypted) directly in the file; `ConfigManager::
+//!   load_config` transparently migrates any such token into the OS keychain
+//!   the first time an old config file is loaded.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::LazyLock;
+
+/// Identifies this app's entries in the OS credential store (the `service`
+/// half of a `keyring::Entry`).
+const KEYRING_SERVICE: &str = "open-weather-wizard";
+/// The `username` half of the OpenWeatherMap API token's `keyring::Entry`.
+/// Not a real username -- `keyring::Entry` just needs *some* stable
+/// (service, username) pair to identify an entry.
+const KEYRING_API_TOKEN_KEY: &str = "openweathermap-api-key";
 
 /// An enum representing the supported weather API providers.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
@@ -56,7 +71,6 @@ impl Default for LocationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub weather_provider: WeatherApiProvider,
-    pub api_token_encoded: String, // Base64 encoded API token
     pub location: LocationConfig,
     /// `#[serde(default)]` so config files saved before this field existed
     /// still load (missing -> `false`, i.e. light mode) instead of failing.
@@ -68,44 +82,83 @@ pub struct AppConfig {
     /// so toggling this doesn't trigger a re-fetch.
     #[serde(default)]
     pub use_fahrenheit: bool,
+    /// Present only to read config files saved by older versions of this
+    /// app, which stored the API token base64-"encoded" (not encrypted)
+    /// directly here. `#[serde(skip_serializing)]` means this is never
+    /// written back out -- `ConfigManager::load_config` migrates it into
+    /// the OS keychain and the field naturally disappears from
+    /// `config.json` after the very next save. Not `pub`: nothing outside
+    /// this module should ever read the *token* through this field again,
+    /// only through `get_api_token`/`set_api_token`.
+    #[serde(rename = "api_token_encoded", default, skip_serializing)]
+    legacy_api_token_encoded: Option<String>,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             weather_provider: WeatherApiProvider::OpenWeather,
-            // Default OpenWeather API key (base64 encoded)
-            api_token_encoded: STANDARD.encode("REDACTED-OPENWEATHERMAP-API-KEY"),
             location: LocationConfig::default(),
             dark_mode: false,
             use_fahrenheit: false,
+            legacy_api_token_encoded: None,
         }
     }
 }
 
 impl AppConfig {
-    /// Sets the API token, automatically encoding it in base64.
+    /// Stores the API token in the OS's secure credential store (macOS
+    /// Keychain, Windows Credential Manager, Linux Secret Service).
     ///
     /// # Arguments
     ///
     /// * `token` - The API token to set.
-    pub fn set_api_token(&mut self, token: &str) {
-        self.api_token_encoded = STANDARD.encode(token);
+    pub fn set_api_token(&mut self, token: &str) -> Result<(), String> {
+        keyring_entry()?
+            .set_password(token)
+            .map_err(|e| format!("Failed to store API token securely: {e}"))
     }
 
-    /// Decodes and returns the API token from its base64 representation.
+    /// Reads the API token back from the OS's secure credential store.
+    /// No token having been set yet is not an error -- it returns an empty
+    /// string, same as an unset field would have before.
     ///
     /// # Returns
     ///
-    /// A `Result` containing the decoded API token `String` on success, or an error `String` on failure.
+    /// A `Result` containing the API token `String` (empty if unset) on
+    /// success, or an error `String` if the credential store itself
+    /// couldn't be accessed (e.g. a locked keychain, no Secret Service
+    /// running).
     pub fn get_api_token(&self) -> Result<String, String> {
-        STANDARD
-            .decode(&self.api_token_encoded)
-            .map_err(|e| format!("Failed to decode API token: {}", e))
-            .and_then(|bytes| {
-                String::from_utf8(bytes).map_err(|e| format!("Invalid UTF-8 in API token: {}", e))
-            })
+        match keyring_entry()?.get_password() {
+            Ok(token) => Ok(token),
+            Err(keyring::Error::NoEntry) => Ok(String::new()),
+            Err(e) => Err(format!("Failed to read API token: {e}")),
+        }
     }
+}
+
+/// The single `keyring::Entry` this app ever uses for the OpenWeatherMap API
+/// token, constructed once per process and reused for every read/write.
+///
+/// Constructing an `Entry` doesn't itself perform any OS I/O (that happens
+/// in `get_password`/`set_password`), so this isn't primarily a performance
+/// optimization -- it matters for testability. The crate's mock credential
+/// backend (used by this module's tests) gives every *fresh*
+/// `Entry::new(...)` call its own unrelated in-memory credential, since
+/// mocks intentionally don't persist across sessions; a fresh `Entry` per
+/// call would make a test's own set-then-get round-trip invisible to
+/// itself. Caching one `Entry` for the process's lifetime sidesteps that
+/// without changing anything about how real platform backends behave (they
+/// persist by service+user at the OS level, independent of the `Entry`
+/// object).
+static API_TOKEN_ENTRY: LazyLock<Result<keyring::Entry, String>> = LazyLock::new(|| {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_API_TOKEN_KEY)
+        .map_err(|e| format!("Failed to access the OS secure credential store: {e}"))
+});
+
+fn keyring_entry() -> Result<&'static keyring::Entry, String> {
+    API_TOKEN_ENTRY.as_ref().map_err(Clone::clone)
 }
 
 /// Manages the loading and saving of the application's configuration.
@@ -137,6 +190,20 @@ impl ConfigManager {
         Ok(Self { config_path })
     }
 
+    /// Points a `ConfigManager` at an arbitrary file, bypassing the real OS
+    /// config directory -- so tests can exercise `load_config`/`save_config`
+    /// (in particular the legacy-token migration, which needs real file
+    /// I/O) against a throwaway file instead of the user's actual config.
+    // The binary crate's own test build (src/main.rs declares its own
+    // `mod config;`, a separate compilation from the library's) has no
+    // test that calls this -- only src/lib.rs's `test_legacy_token_migration`
+    // does -- hence the `allow`.
+    #[cfg(test)]
+    #[allow(dead_code)]
+    pub(crate) fn for_path(config_path: PathBuf) -> Self {
+        Self { config_path }
+    }
+
     /// Loads the application's configuration from a file.
     ///
     /// If the configuration file does not exist, cannot be read, or contains invalid
@@ -148,8 +215,9 @@ impl ConfigManager {
     pub fn load_config(&self) -> AppConfig {
         match fs::read_to_string(&self.config_path) {
             Ok(contents) => match serde_json::from_str::<AppConfig>(&contents) {
-                Ok(config) => {
+                Ok(mut config) => {
                     log::info!("Loaded configuration from {:?}", self.config_path);
+                    self.migrate_legacy_token(&mut config);
                     config
                 }
                 Err(e) => {
@@ -178,5 +246,42 @@ impl ConfigManager {
         fs::write(&self.config_path, json)?;
         log::info!("Saved configuration to {:?}", self.config_path);
         Ok(())
+    }
+
+    /// One-time migration for config files saved by older versions of this
+    /// app: if a base64-"encoded" token is present, decode it into the OS
+    /// keychain and immediately re-save the config so the plaintext-ish
+    /// token is gone from disk on the very next write, not just in memory.
+    /// A no-op (and cheap: one `Option` check) for every config file saved
+    /// since this migration was added.
+    fn migrate_legacy_token(&self, config: &mut AppConfig) {
+        let Some(encoded) = config.legacy_api_token_encoded.take() else {
+            return;
+        };
+
+        let decoded = STANDARD
+            .decode(&encoded)
+            .map_err(|e| format!("invalid base64: {e}"))
+            .and_then(|bytes| String::from_utf8(bytes).map_err(|e| format!("invalid UTF-8: {e}")));
+
+        match decoded {
+            Ok(token) if !token.is_empty() => match config.set_api_token(&token) {
+                Ok(()) => {
+                    log::info!("Migrated API token from config file into the OS keychain");
+                    if let Err(e) = self.save_config(config) {
+                        log::warn!(
+                            "Migrated token to keychain but failed to rewrite config file (it will be retried next launch): {e}"
+                        );
+                    }
+                }
+                Err(e) => log::warn!(
+                    "Found a legacy API token in config file but failed to migrate it into the OS keychain: {e}"
+                ),
+            },
+            Ok(_) => {} // empty token, nothing to migrate
+            Err(e) => log::warn!(
+                "Found an api_token_encoded field in config file but couldn't decode it, ignoring: {e}"
+            ),
+        }
     }
 }

@@ -19,43 +19,102 @@ pub mod weather_api;
 /// Contains integration and unit tests for the library.
 #[cfg(test)]
 mod tests {
-    use crate::config::{AppConfig, LocationConfig, WeatherApiProvider};
+    use crate::config::{AppConfig, ConfigManager, LocationConfig, WeatherApiProvider};
     use crate::weather_api::weather_provider::WeatherProviderFactory;
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
 
-    /// Tests that the API token is correctly encoded to and decoded from base64.
+    /// The API token lives in a single OS-keyring entry shared by the whole
+    /// process (see `config`'s `API_TOKEN_ENTRY`), and the mock credential
+    /// backend used here doesn't key entries by service/user at all -- every
+    /// test that reads or writes a token must run exclusive of every other
+    /// one, or they'll observe each other's writes. Rust's default test
+    /// harness runs tests in parallel threads within one process, so every
+    /// such test acquires this lock (and switches to the mock backend)
+    /// before touching a token, and holds it for its entire body via the
+    /// returned guard.
+    static TOKEN_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn lock_mock_keyring() -> std::sync::MutexGuard<'static, ()> {
+        let guard = TOKEN_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        keyring::set_default_credential_builder(keyring::mock::default_credential_builder());
+        guard
+    }
+
+    /// Tests that a token set via `set_api_token` reads back unchanged via
+    /// `get_api_token` -- i.e. the OS keyring round-trip works, using the
+    /// crate's mock backend so this never touches the real OS keychain.
     #[test]
-    fn test_config_base64_encoding() {
+    fn test_api_token_roundtrip() {
+        let _guard = lock_mock_keyring();
         let mut config = AppConfig::default();
         let test_token = "test_api_key_12345";
 
-        config.set_api_token(test_token);
-        let decoded_token = config.get_api_token().unwrap();
+        config.set_api_token(test_token).unwrap();
+        let round_tripped = config.get_api_token().unwrap();
 
-        assert_eq!(test_token, decoded_token);
+        assert_eq!(test_token, round_tripped);
     }
 
-    /// Verifies that the `AppConfig` struct can be serialized to and deserialized from JSON.
+    /// Verifies that the `AppConfig` struct can be serialized to and
+    /// deserialized from JSON. The API token is deliberately not part of
+    /// this -- it never lives in the JSON at all anymore, only in the OS
+    /// keyring (see `test_api_token_roundtrip` and
+    /// `test_legacy_token_migration`).
     #[test]
     fn test_config_serialization() {
-        let config = AppConfig {
-            weather_provider: WeatherApiProvider::GoogleWeather,
-            api_token_encoded: STANDARD.encode("test_key"),
-            location: LocationConfig {
-                city: "Test City".to_string(),
-                state: "TS".to_string(),
-                country: "TC".to_string(),
-            },
-            dark_mode: false,
-            use_fahrenheit: false,
+        let mut config = AppConfig::default();
+        config.weather_provider = WeatherApiProvider::GoogleWeather;
+        config.location = LocationConfig {
+            city: "Test City".to_string(),
+            state: "TS".to_string(),
+            country: "TC".to_string(),
         };
 
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("GoogleWeather"));
         assert!(json.contains("Test City"));
+        assert!(!json.contains("api_token"));
 
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.location.city, "Test City");
+    }
+
+    /// Verifies that a config file saved by an older version of this app
+    /// (a base64 `api_token_encoded` field alongside the other settings)
+    /// has its token transparently migrated into the OS keyring on load,
+    /// and that the field is gone from the file after that migration's
+    /// automatic re-save -- so it isn't re-attempted (or re-exposed) on
+    /// every subsequent launch.
+    #[test]
+    fn test_legacy_token_migration() {
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+        let _guard = lock_mock_keyring();
+
+        let config_path = std::env::temp_dir().join(format!(
+            "open-weather-wizard-migration-test-{:?}.json",
+            std::thread::current().id()
+        ));
+        let legacy_token = "legacy-secret-token";
+        let legacy_json = format!(
+            r#"{{"weather_provider":"OpenWeather","location":{{"city":"Test City","state":"TS","country":"TC"}},"dark_mode":false,"use_fahrenheit":false,"api_token_encoded":"{}"}}"#,
+            STANDARD.encode(legacy_token)
+        );
+        std::fs::write(&config_path, legacy_json).unwrap();
+
+        let manager = ConfigManager::for_path(config_path.clone());
+        let config = manager.load_config();
+
+        assert_eq!(config.get_api_token().unwrap(), legacy_token);
+
+        let saved = std::fs::read_to_string(&config_path).unwrap();
+        assert!(
+            !saved.contains("api_token_encoded"),
+            "migration should have rewritten the file without the legacy field"
+        );
+
+        let _ = std::fs::remove_file(&config_path);
     }
 
     /// Tests the `WeatherProviderFactory`'s ability to create providers.
@@ -86,17 +145,16 @@ mod tests {
     fn test_arc_mutex_config_access() {
         use std::sync::{Arc, Mutex};
 
-        let config = AppConfig {
-            weather_provider: WeatherApiProvider::OpenWeather,
-            api_token_encoded: STANDARD.encode("test_token"),
-            location: LocationConfig {
-                city: "Test City".to_string(),
-                state: "TS".to_string(),
-                country: "TC".to_string(),
-            },
-            dark_mode: false,
-            use_fahrenheit: false,
+        let _guard = lock_mock_keyring();
+
+        let mut config = AppConfig::default();
+        config.weather_provider = WeatherApiProvider::OpenWeather;
+        config.location = LocationConfig {
+            city: "Test City".to_string(),
+            state: "TS".to_string(),
+            country: "TC".to_string(),
         };
+        config.set_api_token("test_token").unwrap();
 
         let shared_config = Arc::new(Mutex::new(config));
 
@@ -111,7 +169,7 @@ mod tests {
         {
             let mut config_guard = shared_config.lock().unwrap();
             config_guard.location.city = "Updated City".to_string();
-            config_guard.set_api_token("new_token");
+            config_guard.set_api_token("new_token").unwrap();
         }
 
         // Verify the changes
