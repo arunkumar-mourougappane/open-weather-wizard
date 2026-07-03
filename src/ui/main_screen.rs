@@ -16,6 +16,7 @@ use crate::ui::temperature::{
 };
 use crate::ui::transition::ValueTracker;
 use crate::ui::{forecast_row, icons, skeleton, style};
+use crate::weather_api::forecast::ForecastDay;
 use crate::weather_api::openweather_api::{ApiResponse, Weather, get_weather_symbol};
 
 const BOLD: Font = Font {
@@ -54,7 +55,26 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     .spacing(8)
     .align_y(Alignment::Center);
 
-    let content: Element<'_, Message> = if let Some(weather_data) = state.weather.data() {
+    let content: Element<'_, Message> = if let Some(index) = state.selected_forecast_day
+        && let Some(forecast) = state.forecast.data()
+        && let Some(day) = forecast.days.get(index)
+    {
+        column![
+            row![
+                hero_view_forecast(day, state.config.use_fahrenheit),
+                stats_view_forecast(day, state.config.use_fahrenheit),
+            ]
+            .spacing(28)
+            .align_y(Alignment::Start),
+            button(text("\u{2190} Back to current conditions").size(12))
+                .on_press(Message::ForecastDaySelected(0))
+                .style(style::link_button)
+        ]
+        .spacing(12)
+        .align_x(Alignment::Center)
+        .width(Length::Fill)
+        .into()
+    } else if let Some(weather_data) = state.weather.data() {
         let Some(weather) = weather_data.weather.first() else {
             return text("No weather data available").into();
         };
@@ -132,6 +152,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         &state.forecast,
         state.config.use_fahrenheit,
         &state.value_tracker,
+        state.selected_forecast_day,
     ) {
         layout = layout.push(forecast);
     } else if matches!(state.forecast, ForecastStatus::Loading) {
@@ -177,6 +198,118 @@ fn hero_view<'a>(
     .spacing(6)
     .align_x(Alignment::Center)
     .width(Length::Shrink)
+    .into()
+}
+
+/// The hero for a selected forecast day's detail view -- same shape as
+/// `hero_view`, but a forecast day only has a hi/lo range, not one "right
+/// now" reading, so the big accent number is that range instead of a
+/// single temperature.
+fn hero_view_forecast(day: &ForecastDay, use_fahrenheit: bool) -> Element<'_, Message> {
+    let unit = unit_symbol(use_fahrenheit);
+    let temp_max = celsius_to_display(day.temp_max, use_fahrenheit);
+    let temp_min = celsius_to_display(day.temp_min, use_fahrenheit);
+
+    column![
+        icons::view(day.symbol, 108.0),
+        text(day.date.clone()).size(20).font(BOLD),
+        text(format!("{:.0}{unit} / {:.0}{unit}", temp_max, temp_min))
+            .size(34)
+            .font(BOLD)
+            .style(style::accent),
+        text(day.description.clone())
+            .size(15)
+            .font(ITALIC)
+            .style(style::muted),
+    ]
+    .spacing(6)
+    .align_x(Alignment::Center)
+    .width(Length::Shrink)
+    .into()
+}
+
+/// The detail grid for a selected forecast day: feels-like, humidity, wind,
+/// pressure, visibility, and chance of rain -- everything `ForecastDay`
+/// carries. Sunrise/sunset are omitted (only available for today, from live
+/// current conditions, not per forecast day); unlike `stats_view`, values
+/// here aren't cross-faded -- this panel only appears while a day is
+/// selected, not during the always-on 30s ambient refresh.
+fn stats_view_forecast(day: &ForecastDay, use_fahrenheit: bool) -> Element<'_, Message> {
+    let unit = unit_symbol(use_fahrenheit);
+    let feels_like = celsius_to_display(day.feels_like, use_fahrenheit);
+    let wind_speed = speed_to_display(day.wind_speed, use_fahrenheit);
+    let wind_unit = speed_unit(use_fahrenheit);
+    let compass = compass_direction(day.wind_deg);
+    let visibility = distance_to_display(day.visibility as f64, use_fahrenheit);
+    let visibility_unit = distance_unit(use_fahrenheit);
+
+    column![
+        row![
+            stat_chip(
+                "\u{2248}",
+                style::STAT_FEELS_LIKE,
+                "Feels like",
+                text(format!("{:.0}{unit}", feels_like))
+                    .size(15)
+                    .font(BOLD)
+                    .into(),
+            ),
+            stat_chip(
+                "\u{2614}",
+                style::STAT_HUMIDITY,
+                "Humidity",
+                text(format!("{}%", day.humidity))
+                    .size(15)
+                    .font(BOLD)
+                    .into(),
+            ),
+        ]
+        .spacing(10),
+        row![
+            stat_chip(
+                "\u{2197}",
+                style::STAT_WIND,
+                "Wind",
+                text(format!("{:.0} {wind_unit} {compass}", wind_speed))
+                    .size(15)
+                    .font(BOLD)
+                    .into(),
+            ),
+            stat_chip(
+                "\u{2696}",
+                style::STAT_PRESSURE,
+                "Pressure",
+                text(format!("{} hPa", day.pressure))
+                    .size(15)
+                    .font(BOLD)
+                    .into(),
+            ),
+        ]
+        .spacing(10),
+        row![
+            stat_chip(
+                "\u{25ce}",
+                style::STAT_VISIBILITY,
+                "Visibility",
+                text(format!("{:.1} {visibility_unit}", visibility))
+                    .size(15)
+                    .font(BOLD)
+                    .into(),
+            ),
+            stat_chip(
+                "\u{2602}",
+                style::STAT_POP,
+                "Chance of rain",
+                text(format!("{:.0}%", day.pop * 100.0))
+                    .size(15)
+                    .font(BOLD)
+                    .into(),
+            ),
+        ]
+        .spacing(10),
+    ]
+    .spacing(10)
+    .width(Length::Fill)
     .into()
 }
 
