@@ -21,7 +21,11 @@ mod weather_api;
 fn main() -> iced::Result {
     Builder::new()
         .filter_level(LevelFilter::Info)
-        .filter_module("noisy_crate", LevelFilter::Warn)
+        // iced's internals log full window/compositor structs at Info level
+        // on every launch (window attributes, GPU adapter info, etc.) --
+        // useful when debugging iced itself, just noise otherwise.
+        .filter_module("iced_winit", LevelFilter::Warn)
+        .filter_module("iced_wgpu", LevelFilter::Warn)
         .init();
 
     log::info!("Starting Weather Wizard application");

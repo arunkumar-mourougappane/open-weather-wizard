@@ -147,7 +147,7 @@ async fn get_coords(
         .json::<Vec<Location>>()
         .await
         .map_err(GeocodeError::RequestFailed)?;
-    log::info!("Geocoding response: {:?}", locations);
+    log::debug!("Geocoding response: {:?}", locations);
     // The API returns an empty array `[]` if the location isn't found.
     // We take the first element if it exists, otherwise return a `LocationNotFound` error.
     locations
@@ -168,11 +168,11 @@ async fn resolve_location(location: &Location, api_key: &str) -> Result<Location
     .await
     .map_err(|e| match e {
         GeocodeError::RequestFailed(err) => {
-            println!("Error fetching coordinates: {:?}", err);
+            log::error!("Error fetching coordinates: {:?}", err);
             ApiError::RequestFailed(err)
         }
         GeocodeError::LocationNotFound => {
-            println!("Location not found");
+            log::warn!("Location not found");
             ApiError::CityNotFound
         }
     })
@@ -199,7 +199,7 @@ pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiRespon
 
     // Make the asynchronous GET request
     let response = reqwest::get(&url).await.map_err(ApiError::RequestFailed)?;
-    log::info!("Weather API response: {}", response.status());
+    log::debug!("Weather API response: {}", response.status());
     // Check if the request was successful (e.g., status 200 OK)
     if response.status().is_success() {
         // Try to parse the JSON response into our ApiResponse struct
@@ -232,7 +232,7 @@ pub async fn get_forecast(
     );
 
     let response = reqwest::get(&url).await.map_err(ApiError::RequestFailed)?;
-    log::info!("Forecast API response: {}", response.status());
+    log::debug!("Forecast API response: {}", response.status());
     if response.status().is_success() {
         let raw = response
             .json::<crate::weather_api::forecast::RawForecastResponse>()
@@ -256,10 +256,6 @@ pub async fn get_forecast(
 /// # Arguments
 /// * `weather_condition` - The "main" weather string from the API (e.g., "Clear", "Rain").
 pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
-    log::info!(
-        "Mapping weather condition '{}' to symbol",
-        weather_condition
-    );
     match weather_condition {
         "Clear" => WeatherSymbol::Clear,
         "Clouds" => WeatherSymbol::Clouds,
