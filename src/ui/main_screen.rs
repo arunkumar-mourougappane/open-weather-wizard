@@ -7,12 +7,15 @@
 use std::time::Instant;
 
 use iced::widget::{button, column, container, row, scrollable, space, text, tooltip};
-use iced::{Alignment, Element, Font, Length, font};
+use iced::{Alignment, Color, Element, Font, Length, font};
 
 use crate::app::{AppState, Message, WeatherStatus};
-use crate::ui::temperature::{celsius_to_display, unit_symbol};
+use crate::ui::temperature::{
+    celsius_to_display, distance_to_display, distance_unit, speed_to_display, speed_unit,
+    unit_symbol,
+};
 use crate::ui::{forecast_row, icons, spinner, style};
-use crate::weather_api::openweather_api::get_weather_symbol;
+use crate::weather_api::openweather_api::{ApiResponse, Weather, get_weather_symbol};
 
 const BOLD: Font = Font {
     weight: font::Weight::Bold,
@@ -70,7 +73,6 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             let Some(weather) = weather_data.weather.first() else {
                 return text("No weather data available").into();
             };
-            let symbol = get_weather_symbol(&weather.main);
 
             let location_text = if !state.config.location.state.is_empty() {
                 format!("{}, {}", weather_data.name, state.config.location.state)
@@ -78,28 +80,22 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                 weather_data.name.clone()
             };
 
-            let use_fahrenheit = state.config.use_fahrenheit;
-            let unit = unit_symbol(use_fahrenheit);
-            let temp = celsius_to_display(weather_data.main.temp, use_fahrenheit);
-            let feels_like = celsius_to_display(weather_data.main.feels_like, use_fahrenheit);
-
             let mut card = column![
-                icons::view(symbol, 128.0),
-                text(location_text).size(24).font(BOLD),
-                text(format!("{:.1}{unit}", temp))
-                    .size(34)
-                    .font(BOLD)
-                    .style(style::accent),
-                text(format!("Feels like {:.0}{unit}", feels_like))
-                    .size(13)
-                    .style(style::muted),
-                text(weather.description.clone()).size(18).font(ITALIC),
-                text(format!("Humidity: {}%", weather_data.main.humidity))
-                    .size(14)
-                    .style(style::muted),
+                row![
+                    hero_view(
+                        weather_data,
+                        weather,
+                        location_text,
+                        state.config.use_fahrenheit
+                    ),
+                    stats_view(weather_data, state.config.use_fahrenheit),
+                ]
+                .spacing(28)
+                .align_y(Alignment::Start)
             ]
-            .spacing(8)
-            .align_x(Alignment::Center);
+            .spacing(12)
+            .align_x(Alignment::Center)
+            .width(Length::Fill);
 
             if let Some(label) = updated_label(state.last_updated) {
                 card = card.push(text(label).size(12).style(style::muted));
@@ -130,6 +126,170 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     // whatever space is left -- that squeeze is what actually distorted them,
     // not the icons' own sizing.
     scrollable(layout).height(Length::Fill).into()
+}
+
+/// The left-hand hero: icon, location, big temperature, and a short
+/// description -- the one thing a glance at the app should land on first.
+fn hero_view<'a>(
+    weather_data: &'a ApiResponse,
+    weather: &'a Weather,
+    location_text: String,
+    use_fahrenheit: bool,
+) -> Element<'a, Message> {
+    let symbol = get_weather_symbol(&weather.main);
+    let unit = unit_symbol(use_fahrenheit);
+    let temp = celsius_to_display(weather_data.main.temp, use_fahrenheit);
+
+    column![
+        icons::view(symbol, 108.0),
+        text(location_text).size(20).font(BOLD),
+        text(format!("{:.1}{unit}", temp))
+            .size(38)
+            .font(BOLD)
+            .style(style::accent),
+        text(weather.description.clone())
+            .size(15)
+            .font(ITALIC)
+            .style(style::muted),
+    ]
+    .spacing(6)
+    .align_x(Alignment::Center)
+    .width(Length::Shrink)
+    .into()
+}
+
+/// The right-hand detail grid: feels-like, humidity, wind, pressure,
+/// visibility, today's high/low, and sunrise/sunset -- laid out as a 2x4
+/// grid of color-coded chips so the extra data reads as scannable stats
+/// rather than another wall of text.
+fn stats_view(weather_data: &ApiResponse, use_fahrenheit: bool) -> Element<'_, Message> {
+    let unit = unit_symbol(use_fahrenheit);
+    let feels_like = celsius_to_display(weather_data.main.feels_like, use_fahrenheit);
+    let temp_min = celsius_to_display(weather_data.main.temp_min, use_fahrenheit);
+    let temp_max = celsius_to_display(weather_data.main.temp_max, use_fahrenheit);
+
+    let wind_speed = speed_to_display(weather_data.wind.speed, use_fahrenheit);
+    let wind_unit = speed_unit(use_fahrenheit);
+    let compass = compass_direction(weather_data.wind.deg);
+
+    let visibility = distance_to_display(weather_data.visibility as f64, use_fahrenheit);
+    let visibility_unit = distance_unit(use_fahrenheit);
+
+    let sunrise = format_local_time(weather_data.sys.sunrise, weather_data.timezone);
+    let sunset = format_local_time(weather_data.sys.sunset, weather_data.timezone);
+
+    column![
+        row![
+            stat_chip(
+                "\u{2248}",
+                style::STAT_FEELS_LIKE,
+                "Feels like",
+                format!("{:.0}{unit}", feels_like),
+            ),
+            stat_chip(
+                "\u{2614}",
+                style::STAT_HUMIDITY,
+                "Humidity",
+                format!("{}%", weather_data.main.humidity),
+            ),
+        ]
+        .spacing(10),
+        row![
+            stat_chip(
+                "\u{2197}",
+                style::STAT_WIND,
+                "Wind",
+                format!("{:.0} {wind_unit} {compass}", wind_speed),
+            ),
+            stat_chip(
+                "\u{2696}",
+                style::STAT_PRESSURE,
+                "Pressure",
+                format!("{} hPa", weather_data.main.pressure),
+            ),
+        ]
+        .spacing(10),
+        row![
+            stat_chip(
+                "\u{25ce}",
+                style::STAT_VISIBILITY,
+                "Visibility",
+                format!("{:.1} {visibility_unit}", visibility),
+            ),
+            stat_chip(
+                "\u{21c5}",
+                style::STAT_RANGE,
+                "High / Low",
+                format!("{:.0}{unit} / {:.0}{unit}", temp_max, temp_min),
+            ),
+        ]
+        .spacing(10),
+        row![
+            stat_chip("\u{2600}", style::STAT_SUNRISE, "Sunrise", sunrise),
+            stat_chip("\u{263e}", style::STAT_SUNSET, "Sunset", sunset),
+        ]
+        .spacing(10),
+    ]
+    .spacing(10)
+    .width(Length::Fill)
+    .into()
+}
+
+/// A single detail stat: a round tinted glyph badge next to a label/value
+/// pair, in a card matching the forecast row's visual language.
+fn stat_chip<'a>(
+    glyph: &'static str,
+    color: Color,
+    label: &'static str,
+    value: String,
+) -> Element<'a, Message> {
+    let badge = container(text(glyph).size(15))
+        .center(30)
+        .style(style::stat_badge(color));
+
+    container(
+        row![
+            badge,
+            column![
+                text(label).size(11).style(style::muted),
+                text(value).size(15).font(BOLD),
+            ]
+            .spacing(2),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center),
+    )
+    .padding(10)
+    .width(Length::Fill)
+    .style(style::day_card)
+    .into()
+}
+
+/// Meteorological degrees (0 = due north, clockwise) to a 16-point compass
+/// abbreviation.
+fn compass_direction(deg: i64) -> &'static str {
+    const DIRECTIONS: [&str; 16] = [
+        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW",
+        "NW", "NNW",
+    ];
+    let normalized = deg.rem_euclid(360) as f64;
+    let index = ((normalized / 22.5) + 0.5) as usize % 16;
+    DIRECTIONS[index]
+}
+
+/// Renders a Unix timestamp as a local 12-hour clock time using the API's
+/// `timezone` offset (seconds from UTC) -- avoids pulling in a date/time
+/// crate for what's ultimately just "HH:MM AM/PM".
+fn format_local_time(unix_ts: i64, tz_offset_secs: i64) -> String {
+    let local_secs = (unix_ts + tz_offset_secs).rem_euclid(86_400);
+    let hours24 = local_secs / 3600;
+    let minutes = (local_secs % 3600) / 60;
+    let period = if hours24 < 12 { "AM" } else { "PM" };
+    let hours12 = match hours24 % 12 {
+        0 => 12,
+        h => h,
+    };
+    format!("{hours12}:{minutes:02} {period}")
 }
 
 /// A square icon-only toolbar button, with the action's name shown in a

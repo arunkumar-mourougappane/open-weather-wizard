@@ -17,6 +17,18 @@ pub const ACCENT: Color = Color::from_rgb(0.11, 0.45, 0.85);
 /// Slightly darker accent for hover/press states.
 pub const ACCENT_STRONG: Color = Color::from_rgb(0.07, 0.35, 0.70);
 
+/// A small fixed palette used to color-code the current-conditions detail
+/// chips (humidity, wind, pressure, etc.) -- one glance at the badge color
+/// distinguishes a stat from its neighbors without reading the label first.
+pub const STAT_FEELS_LIKE: Color = ACCENT;
+pub const STAT_HUMIDITY: Color = Color::from_rgb(0.20, 0.60, 0.72);
+pub const STAT_WIND: Color = Color::from_rgb(0.27, 0.62, 0.38);
+pub const STAT_PRESSURE: Color = Color::from_rgb(0.56, 0.38, 0.78);
+pub const STAT_VISIBILITY: Color = Color::from_rgb(0.40, 0.46, 0.56);
+pub const STAT_RANGE: Color = Color::from_rgb(0.87, 0.55, 0.18);
+pub const STAT_SUNRISE: Color = Color::from_rgb(0.90, 0.62, 0.12);
+pub const STAT_SUNSET: Color = Color::from_rgb(0.46, 0.34, 0.64);
+
 /// The main content panel behind the current-conditions display: a card in
 /// the theme's base background/border colors with a faint shadow, lifting
 /// it off the window background rather than the text floating on bare
@@ -151,5 +163,20 @@ pub fn danger(theme: &Theme) -> text::Style {
 pub fn accent(_theme: &Theme) -> text::Style {
     text::Style {
         color: Some(ACCENT),
+    }
+}
+
+/// A small round, tinted badge behind a stat-chip's glyph -- a faint wash of
+/// `color` rather than a solid fill, so it reads as an accent rather than
+/// competing with the chip's own value text for attention.
+pub fn stat_badge(color: Color) -> impl Fn(&Theme) -> container::Style {
+    move |_theme: &Theme| container::Style {
+        background: Some(Background::Color(Color { a: 0.16, ..color })),
+        text_color: Some(color),
+        border: Border {
+            radius: 999.0.into(),
+            ..Border::default()
+        },
+        ..container::Style::default()
     }
 }
