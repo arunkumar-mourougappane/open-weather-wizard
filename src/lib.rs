@@ -231,11 +231,20 @@ mod tests {
     /// catches malformed JSON before it ever reaches the animated-icon widget.
     #[test]
     fn test_lottie_assets_parse() {
-        let assets: [(&str, &str); 4] = [
+        let assets: [(&str, &str); 10] = [
             ("sun", include_str!("../assets/lottie/sun.json")),
             ("clouds", include_str!("../assets/lottie/clouds.json")),
             ("rain", include_str!("../assets/lottie/rain.json")),
             ("snow", include_str!("../assets/lottie/snow.json")),
+            ("drizzle", include_str!("../assets/lottie/drizzle.json")),
+            (
+                "thunderstorm",
+                include_str!("../assets/lottie/thunderstorm.json"),
+            ),
+            ("fog", include_str!("../assets/lottie/fog.json")),
+            ("haze", include_str!("../assets/lottie/haze.json")),
+            ("wind", include_str!("../assets/lottie/wind.json")),
+            ("tornado", include_str!("../assets/lottie/tornado.json")),
         ];
 
         for (name, json) in assets {
