@@ -24,12 +24,20 @@ const ITALIC: Font = Font {
 };
 
 pub fn view(state: &AppState) -> Element<'_, Message> {
+    let is_refreshing = matches!(state.weather, WeatherStatus::Loading);
+
     let toolbar = row![
         text("Weather Wizard")
             .size(20)
             .font(BOLD)
             .style(style::accent),
         space::horizontal(),
+        // Disabled while a fetch is already in flight, both to avoid
+        // piling up redundant requests and as a small "yes, it's working"
+        // signal beyond the spinner in the panel below.
+        button("Refresh")
+            .on_press_maybe((!is_refreshing).then_some(Message::RefreshRequested))
+            .style(style::secondary_button),
         button("Preferences")
             .on_press(Message::OpenPreferences)
             .style(style::secondary_button),
