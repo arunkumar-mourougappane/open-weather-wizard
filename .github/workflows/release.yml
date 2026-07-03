@@ -29,7 +29,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libdbus-1-dev
 
       - name: Build release binary
         run: cargo build --release --locked
@@ -64,6 +64,27 @@ jobs:
           name: release-binary-${{ matrix.os }}
           path: ${{ steps.package.outputs.path }}
 
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - name: Build installable app package
+        id: bundle
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Windows) formats="nsis" ;;
+            macOS)   formats="dmg" ;;
+            Linux)   formats="deb" ;;
+          esac
+          cargo packager --release --formats "$formats"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-installer-${{ matrix.os }}
+          path: target/dist/*.{dmg,deb,exe}
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
     needs: build
@@ -77,6 +98,13 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: release-binary-*
+          path: dist
+          merge-multiple: true
+
+      - name: Download all installer packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-installer-*
           path: dist
           merge-multiple: true
 

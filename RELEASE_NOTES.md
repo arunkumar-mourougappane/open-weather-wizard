@@ -6,4 +6,6 @@ become the body of the GitHub Release created by
 
 ## Unreleased
 
-- (describe what's changing in the next release here)
+- Releases now include installable app packages alongside the raw binaries:
+  a `.dmg` for macOS, a `.deb` for Linux, and an `.exe` (NSIS) installer for
+  Windows.
