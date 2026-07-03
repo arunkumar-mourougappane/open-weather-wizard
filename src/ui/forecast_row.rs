@@ -7,7 +7,7 @@
 //! mock) gets an explicit muted hint rather than the row just silently
 //! vanishing, which otherwise reads as a bug rather than a provider limitation.
 
-use iced::widget::{column, container, row, scrollable, text};
+use iced::widget::{column, container, responsive, row, scrollable, text};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{ForecastStatus, Message};
@@ -18,6 +18,27 @@ const BOLD: Font = Font {
     weight: font::Weight::Bold,
     ..Font::DEFAULT
 };
+
+/// `day_card`'s content column width (100) plus its container's padding
+/// (10 on each side).
+const CARD_WIDTH: f32 = 120.0;
+const CARD_SPACING: f32 = 12.0;
+
+/// Total width `n` cards need laid out in a row with `CARD_SPACING` between
+/// them (no trailing gap after the last card).
+fn cards_width(n: usize) -> f32 {
+    if n == 0 {
+        return 0.0;
+    }
+    n as f32 * CARD_WIDTH + (n - 1) as f32 * CARD_SPACING
+}
+
+/// Tall enough for `day_card`'s content (date + 48px icon + hi/lo + short
+/// description, plus its container's padding) with a little slack. Set
+/// explicitly because `responsive` defaults to `Length::Fill` for height,
+/// which would otherwise try to consume all remaining vertical space in the
+/// column it sits in.
+const ROW_HEIGHT: f32 = 140.0;
 
 /// Renders the forecast row, or `None` if there's nothing to show at all
 /// (loading with no prior data yet, or an error).
@@ -32,36 +53,45 @@ pub fn view(forecast: &ForecastStatus) -> Option<Element<'_, Message>> {
                 .into(),
         ),
         ForecastStatus::Loaded(response) => {
-            // OpenWeatherMap's forecast always starts from "now", so the
-            // first aggregated day is definitionally today -- no date/time
-            // crate needed to figure out which card that is.
-            let cards = response
-                .days
-                .iter()
-                .enumerate()
-                .map(|(index, day)| day_card(day, index == 0));
-            let cards_row = row(cards).spacing(12);
+            let days = &response.days;
 
-            // Center the row so unused width splits evenly on both sides
-            // instead of collecting only on the right (the row's natural
-            // width is just its cards' -- when that's narrower than the
-            // panel above it, left-aligning it inside a Fill-width
-            // scrollable, as before, pinned it to the left edge). Centering
-            // is a no-op once there are enough cards to overflow the
-            // viewport, since content wider than its container has no
-            // leftover space to distribute.
-            //
-            // A carousel, not a document: the scrollbar track/thumb are
-            // hidden (Scrollbar::hidden() zeroes their width), but the row
-            // still scrolls via trackpad/mouse-wheel/click-drag -- hiding
-            // the scrollbar doesn't disable scrolling itself.
+            // `scrollable` gives its content an *infinite* max-width limit
+            // along the scrolling axis (so content is actually allowed to
+            // exceed the viewport and scroll) -- which means a `Length::Fill`
+            // container placed inside it never resolves to "the visible
+            // viewport width" and can't be used to center content there.
+            // `responsive` sidesteps this by measuring the real available
+            // size at layout time: center a plain (non-scrolling) row when
+            // the cards fit, or fall back to the hidden-scrollbar carousel
+            // only once they don't.
             Some(
-                scrollable(container(cards_row).center_x(Length::Fill))
-                    .direction(scrollable::Direction::Horizontal(
-                        scrollable::Scrollbar::hidden(),
-                    ))
-                    .width(Length::Fill)
-                    .into(),
+                responsive(move |size| {
+                    let cards = || {
+                        days.iter()
+                            .enumerate()
+                            .map(|(index, day)| day_card(day, index == 0))
+                    };
+
+                    if cards_width(days.len()) <= size.width {
+                        container(row(cards()).spacing(CARD_SPACING))
+                            .center_x(Length::Fill)
+                            .into()
+                    } else {
+                        // A carousel, not a document: the scrollbar
+                        // track/thumb are hidden (Scrollbar::hidden() zeroes
+                        // their width), but the row still scrolls via
+                        // trackpad/mouse-wheel/click-drag -- hiding the
+                        // scrollbar doesn't disable scrolling itself.
+                        scrollable(row(cards()).spacing(CARD_SPACING))
+                            .direction(scrollable::Direction::Horizontal(
+                                scrollable::Scrollbar::hidden(),
+                            ))
+                            .width(Length::Fill)
+                            .into()
+                    }
+                })
+                .height(ROW_HEIGHT)
+                .into(),
             )
         }
     }
