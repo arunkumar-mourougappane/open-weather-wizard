@@ -157,6 +157,9 @@ mod tests {
             main: Main {
                 temp,
                 feels_like: temp,
+                temp_min: temp,
+                temp_max: temp,
+                pressure: 1013,
                 humidity: 50,
             },
             weather: vec![Weather {

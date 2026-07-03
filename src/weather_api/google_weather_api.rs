@@ -12,7 +12,7 @@
 
 use crate::config::LocationConfig;
 use crate::weather_api::forecast::ForecastResponse;
-use crate::weather_api::openweather_api::{ApiError, ApiResponse, Main, Weather};
+use crate::weather_api::openweather_api::{ApiError, ApiResponse, Main, Sys, Weather, Wind};
 use crate::weather_api::weather_provider::WeatherProvider;
 use async_trait::async_trait;
 
@@ -69,8 +69,21 @@ impl WeatherProvider for GoogleWeatherProvider {
             main: Main {
                 temp: 22.5,
                 feels_like: 22.0,
+                temp_min: 19.0,
+                temp_max: 25.0,
+                pressure: 1015,
                 humidity: 65,
             },
+            wind: Wind {
+                speed: 3.6,
+                deg: 210,
+            },
+            visibility: 10000,
+            sys: Sys {
+                sunrise: 1_700_000_000,
+                sunset: 1_700_040_000,
+            },
+            timezone: 0,
             name: location.city.clone(),
         };
 
