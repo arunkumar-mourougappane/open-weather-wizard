@@ -9,12 +9,12 @@ use std::time::Instant;
 use iced::widget::{button, column, container, row, scrollable, space, text, tooltip};
 use iced::{Alignment, Color, Element, Font, Length, font};
 
-use crate::app::{AppState, Message, WeatherStatus};
+use crate::app::{AppState, ForecastStatus, Message, WeatherStatus};
 use crate::ui::temperature::{
     celsius_to_display, distance_to_display, distance_unit, speed_to_display, speed_unit,
     unit_symbol,
 };
-use crate::ui::{forecast_row, icons, spinner, style};
+use crate::ui::{forecast_row, icons, skeleton, style};
 use crate::weather_api::openweather_api::{ApiResponse, Weather, get_weather_symbol};
 
 const BOLD: Font = Font {
@@ -101,14 +101,13 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             .into(),
             // `Loading` is the only remaining case reachable here: `.data()`
             // returned `None`, which only `Loading` and `Error` do, and
-            // `Error` was just matched above.
-            _ => column![
-                spinner::spinner(32.0),
-                text("Fetching weather...").size(18).style(style::muted),
-            ]
-            .spacing(12)
-            .align_x(Alignment::Center)
-            .into(),
+            // `Error` was just matched above. Only reachable before the
+            // very first successful fetch (or retrying after a first-load
+            // error) -- see `WeatherStatus`'s docs in `src/app.rs`.
+            _ => row![skeleton::hero(), skeleton::stats()]
+                .spacing(28)
+                .align_y(Alignment::Start)
+                .into(),
         }
     };
 
@@ -125,6 +124,8 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
 
     if let Some(forecast) = forecast_row::view(&state.forecast, state.config.use_fahrenheit) {
         layout = layout.push(forecast);
+    } else if matches!(state.forecast, ForecastStatus::Loading) {
+        layout = layout.push(skeleton::forecast_row());
     }
 
     // If the window is shorter than the content needs (a narrow custom resize,
