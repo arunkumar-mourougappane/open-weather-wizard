@@ -152,7 +152,11 @@ mod tests {
 
         let item = |dt_txt: &str, temp: f64, main: &str| ForecastListItem {
             dt: 0,
-            main: Main { temp, humidity: 50 },
+            main: Main {
+                temp,
+                feels_like: temp,
+                humidity: 50,
+            },
             weather: vec![Weather {
                 main: main.to_string(),
                 description: format!("{main} description"),

@@ -68,6 +68,7 @@ impl WeatherProvider for GoogleWeatherProvider {
             }],
             main: Main {
                 temp: 22.5,
+                feels_like: 22.0,
                 humidity: 65,
             },
             name: location.city.clone(),
