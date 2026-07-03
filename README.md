@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="assets/icon/icon.png" alt="Open Weather Wizard icon" width="128" height="128">
-</p>
-
-# Open Weather Wizard
+# <img src="assets/icon/icon.png" alt="" width="40" height="40"> Open Weather Wizard
 
 [![CI](https://github.com/arunkumar-mourougappane/open-weather-wizard/actions/workflows/ci.yml/badge.svg)](https://github.com/arunkumar-mourougappane/open-weather-wizard/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/open-weather-wizard.svg)](https://crates.io/crates/open-weather-wizard)
