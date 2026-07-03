@@ -143,16 +143,19 @@ mod tests {
     }
 
     /// Verifies that `aggregate_daily` buckets 3-hourly entries by UTC calendar
-    /// date, computes correct min/max temperatures per day, and picks the midday
-    /// entry's condition as the day's dominant/representative condition.
+    /// date, computes correct min/max temperatures per day, picks the midday
+    /// entry's condition as the day's dominant/representative condition, pulls
+    /// feels-like/humidity/wind/pressure/visibility from that same
+    /// representative entry, and takes the **max** `pop` across the whole day
+    /// rather than just the representative entry's value.
     #[test]
     fn test_forecast_aggregation() {
         use crate::weather_api::forecast::{
             ForecastCity, ForecastListItem, RawForecastResponse, aggregate_daily,
         };
-        use crate::weather_api::openweather_api::{Main, Weather};
+        use crate::weather_api::openweather_api::{Main, Weather, Wind};
 
-        let item = |dt_txt: &str, temp: f64, main: &str| ForecastListItem {
+        let item = |dt_txt: &str, temp: f64, main: &str, pop: f64| ForecastListItem {
             dt: 0,
             main: Main {
                 temp,
@@ -166,6 +169,12 @@ mod tests {
                 main: main.to_string(),
                 description: format!("{main} description"),
             }],
+            wind: Wind {
+                speed: 5.0,
+                deg: 180,
+            },
+            pop,
+            visibility: 10_000,
             dt_txt: dt_txt.to_string(),
         };
 
@@ -175,14 +184,16 @@ mod tests {
             },
             list: vec![
                 // Day 1: cold overnight, midday is Rain -- should be the dominant condition.
-                item("2026-07-02 00:00:00", 10.0, "Clouds"),
-                item("2026-07-02 03:00:00", 8.0, "Clouds"),
-                item("2026-07-02 12:00:00", 15.0, "Rain"),
-                item("2026-07-02 21:00:00", 12.0, "Clouds"),
+                // pop peaks well before midday, so the day's pop must be the
+                // max across all entries, not just the representative one.
+                item("2026-07-02 00:00:00", 10.0, "Clouds", 0.1),
+                item("2026-07-02 03:00:00", 8.0, "Clouds", 0.9),
+                item("2026-07-02 12:00:00", 15.0, "Rain", 0.3),
+                item("2026-07-02 21:00:00", 12.0, "Clouds", 0.2),
                 // Day 2: no midday entry -- falls back to the most frequent condition (Clear).
-                item("2026-07-03 00:00:00", 18.0, "Clear"),
-                item("2026-07-03 03:00:00", 16.0, "Clear"),
-                item("2026-07-03 21:00:00", 20.0, "Clouds"),
+                item("2026-07-03 00:00:00", 18.0, "Clear", 0.0),
+                item("2026-07-03 03:00:00", 16.0, "Clear", 0.4),
+                item("2026-07-03 21:00:00", 20.0, "Clouds", 0.5),
             ],
         };
 
@@ -196,12 +207,22 @@ mod tests {
         assert_eq!(day1.temp_min, 8.0);
         assert_eq!(day1.temp_max, 15.0);
         assert_eq!(day1.description, "Rain description");
+        // Representative entry is the midday Rain reading (temp 15.0).
+        assert_eq!(day1.feels_like, 15.0);
+        assert_eq!(day1.humidity, 50);
+        assert_eq!(day1.wind_speed, 5.0);
+        assert_eq!(day1.wind_deg, 180);
+        assert_eq!(day1.pressure, 1013);
+        assert_eq!(day1.visibility, 10_000);
+        // Max across the day (0.9 at 03:00), not the representative entry's 0.3.
+        assert_eq!(day1.pop, 0.9);
 
         let day2 = &forecast.days[1];
         assert_eq!(day2.date, "2026-07-03");
         assert_eq!(day2.temp_min, 16.0);
         assert_eq!(day2.temp_max, 20.0);
         assert_eq!(day2.description, "Clear description");
+        assert_eq!(day2.pop, 0.5);
     }
 
     /// Verifies that `GoogleWeatherProvider::get_forecast` returns an empty
