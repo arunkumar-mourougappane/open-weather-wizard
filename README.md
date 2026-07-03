@@ -30,6 +30,14 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map and design
 
 ## Installation
 
+### Prebuilt app packages (recommended)
+
+Each [GitHub Release](https://github.com/arunkumar-mourougappane/open-weather-wizard/releases) includes installable packages alongside raw binaries:
+
+- **macOS** — `.dmg` (drag `Open Weather Wizard.app` into `/Applications`)
+- **Linux** — `.deb` (`sudo apt install ./open-weather-wizard_*.deb` or `sudo dpkg -i`)
+- **Windows** — `.exe` NSIS installer (Start Menu shortcut, uninstaller)
+
 ### From crates.io
 
 ```bash
