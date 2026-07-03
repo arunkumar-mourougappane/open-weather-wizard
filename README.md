@@ -10,6 +10,10 @@
 
 A simple, elegant desktop weather app built in Rust with [iced](https://github.com/iced-rs/iced). Current conditions, a 5-day forecast you can tap into for detail, and every weather condition rendered as its own hand-authored, GPU-composited [Lottie](https://lottiefiles.com/) animation.
 
+<p align="center">
+  <img src="docs/screenshots/main-view.png" alt="Open Weather Wizard main window showing current conditions and the 5-day forecast carousel" width="600">
+</p>
+
 ## Features
 
 - **Current conditions at a glance** — icon, temperature, and a color-coded stat grid (feels-like, humidity, wind, pressure, visibility, sunrise/sunset).
