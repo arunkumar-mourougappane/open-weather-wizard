@@ -44,16 +44,15 @@ const ROW_HEIGHT: f32 = 140.0;
 /// Renders the forecast row, or `None` if there's nothing to show at all
 /// (loading with no prior data yet, or an error).
 pub fn view(forecast: &ForecastStatus, use_fahrenheit: bool) -> Option<Element<'_, Message>> {
-    match forecast {
-        ForecastStatus::Loading => None,
-        ForecastStatus::Error => None,
-        ForecastStatus::Loaded(response) if response.days.is_empty() => Some(
+    match forecast.data() {
+        None => None,
+        Some(response) if response.days.is_empty() => Some(
             text("Forecast not available for this provider")
                 .size(13)
                 .style(style::muted)
                 .into(),
         ),
-        ForecastStatus::Loaded(response) => {
+        Some(response) => {
             let days = &response.days;
 
             // `scrollable` gives its content an *infinite* max-width limit

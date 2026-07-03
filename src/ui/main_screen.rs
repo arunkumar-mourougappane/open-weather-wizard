@@ -28,7 +28,10 @@ const ITALIC: Font = Font {
 };
 
 pub fn view(state: &AppState) -> Element<'_, Message> {
-    let is_refreshing = matches!(state.weather, WeatherStatus::Loading);
+    let is_refreshing = matches!(
+        state.weather,
+        WeatherStatus::Loading | WeatherStatus::Refreshing(_)
+    );
 
     let toolbar = row![
         text("Weather Wizard")
@@ -50,58 +53,62 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     .spacing(8)
     .align_y(Alignment::Center);
 
-    let content: Element<'_, Message> = match &state.weather {
-        WeatherStatus::Loading => column![
-            spinner::spinner(32.0),
-            text("Fetching weather...").size(18).style(style::muted),
+    let content: Element<'_, Message> = if let Some(weather_data) = state.weather.data() {
+        let Some(weather) = weather_data.weather.first() else {
+            return text("No weather data available").into();
+        };
+
+        let location_text = if !state.config.location.state.is_empty() {
+            format!("{}, {}", weather_data.name, state.config.location.state)
+        } else {
+            weather_data.name.clone()
+        };
+
+        let mut card = column![
+            row![
+                hero_view(
+                    weather_data,
+                    weather,
+                    location_text,
+                    state.config.use_fahrenheit
+                ),
+                stats_view(weather_data, state.config.use_fahrenheit),
+            ]
+            .spacing(28)
+            .align_y(Alignment::Start)
         ]
         .spacing(12)
         .align_x(Alignment::Center)
-        .into(),
-        WeatherStatus::Error(message) => column![
-            text(format!("Error: {}", message))
-                .size(16)
-                .style(style::danger),
-            button("Retry")
-                .on_press(Message::RefreshRequested)
-                .style(style::primary_button),
-        ]
-        .spacing(12)
-        .align_x(Alignment::Center)
-        .into(),
-        WeatherStatus::Loaded(weather_data) => {
-            let Some(weather) = weather_data.weather.first() else {
-                return text("No weather data available").into();
-            };
+        .width(Length::Fill);
 
-            let location_text = if !state.config.location.state.is_empty() {
-                format!("{}, {}", weather_data.name, state.config.location.state)
-            } else {
-                weather_data.name.clone()
-            };
+        if let Some(label) = updated_label(state.last_updated) {
+            card = card.push(text(label).size(12).style(style::muted));
+        }
 
-            let mut card = column![
-                row![
-                    hero_view(
-                        weather_data,
-                        weather,
-                        location_text,
-                        state.config.use_fahrenheit
-                    ),
-                    stats_view(weather_data, state.config.use_fahrenheit),
-                ]
-                .spacing(28)
-                .align_y(Alignment::Start)
+        card.into()
+    } else {
+        match &state.weather {
+            WeatherStatus::Error(message) => column![
+                text(format!("Error: {}", message))
+                    .size(16)
+                    .style(style::danger),
+                button("Retry")
+                    .on_press(Message::RefreshRequested)
+                    .style(style::primary_button),
             ]
             .spacing(12)
             .align_x(Alignment::Center)
-            .width(Length::Fill);
-
-            if let Some(label) = updated_label(state.last_updated) {
-                card = card.push(text(label).size(12).style(style::muted));
-            }
-
-            card.into()
+            .into(),
+            // `Loading` is the only remaining case reachable here: `.data()`
+            // returned `None`, which only `Loading` and `Error` do, and
+            // `Error` was just matched above.
+            _ => column![
+                spinner::spinner(32.0),
+                text("Fetching weather...").size(18).style(style::muted),
+            ]
+            .spacing(12)
+            .align_x(Alignment::Center)
+            .into(),
         }
     };
 

@@ -39,11 +39,30 @@ const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 const ANIMATION_TICK_INTERVAL: Duration = Duration::from_millis(33);
 
 /// The lifecycle of an async weather fetch, driving the main screen's display.
+///
+/// `Refreshing` carries the last-known-good data forward while a background
+/// fetch (auto-refresh or the manual Refresh button) is in flight, so the UI
+/// never blanks back to a loading state once it has real data to show --
+/// `Loading` is reachable only before the very first successful fetch (or
+/// after a first-load `Error`, on retry). `view()` treats `Loaded` and
+/// `Refreshing` identically; the distinction exists purely for `update()`.
 #[derive(Debug, Clone)]
 pub enum WeatherStatus {
     Loading,
     Loaded(ApiResponse),
+    Refreshing(ApiResponse),
     Error(String),
+}
+
+impl WeatherStatus {
+    /// The data to render, whether idle or mid-refresh -- `None` while
+    /// loading for the first time or after a first-load error.
+    pub fn data(&self) -> Option<&ApiResponse> {
+        match self {
+            WeatherStatus::Loaded(data) | WeatherStatus::Refreshing(data) => Some(data),
+            WeatherStatus::Loading | WeatherStatus::Error(_) => None,
+        }
+    }
 }
 
 /// The lifecycle of an async forecast fetch. Kept separate from `WeatherStatus`
@@ -52,12 +71,23 @@ pub enum WeatherStatus {
 ///
 /// Unlike `WeatherStatus::Error`, this carries no message: a forecast failure is
 /// never surfaced in the UI (the row is simply omitted), so the failure reason is
-/// only logged at the point of transition in `update()`.
+/// only logged at the point of transition in `update()`. `Refreshing` mirrors
+/// `WeatherStatus::Refreshing` -- see its docs for why the split exists.
 #[derive(Debug, Clone)]
 pub enum ForecastStatus {
     Loading,
     Loaded(ForecastResponse),
+    Refreshing(ForecastResponse),
     Error,
+}
+
+impl ForecastStatus {
+    pub fn data(&self) -> Option<&ForecastResponse> {
+        match self {
+            ForecastStatus::Loaded(data) | ForecastStatus::Refreshing(data) => Some(data),
+            ForecastStatus::Loading | ForecastStatus::Error => None,
+        }
+    }
 }
 
 /// Top-level application state, owned directly (no `Arc<Mutex<>>`): iced's Elm
@@ -164,8 +194,21 @@ pub fn boot() -> (AppState, Task<Message>) {
 pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
     match message {
         Message::RefreshRequested | Message::Tick(_) => {
-            state.weather = WeatherStatus::Loading;
-            state.forecast = ForecastStatus::Loading;
+            // Keep showing last-known-good data during the fetch instead of
+            // blanking to a loading state -- only the very first fetch (or a
+            // retry after a first-load error) has nothing to show yet.
+            state.weather = match std::mem::replace(&mut state.weather, WeatherStatus::Loading) {
+                WeatherStatus::Loaded(data) | WeatherStatus::Refreshing(data) => {
+                    WeatherStatus::Refreshing(data)
+                }
+                other => other,
+            };
+            state.forecast = match std::mem::replace(&mut state.forecast, ForecastStatus::Loading) {
+                ForecastStatus::Loaded(data) | ForecastStatus::Refreshing(data) => {
+                    ForecastStatus::Refreshing(data)
+                }
+                other => other,
+            };
             Task::batch([
                 fetch_weather_task(&state.config),
                 fetch_forecast_task(&state.config),
@@ -177,7 +220,16 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::WeatherFetched(Err(error)) => {
-            state.weather = WeatherStatus::Error(error);
+            // A failed background refresh shouldn't disrupt a screen that
+            // already has good data -- only surface the error if we had
+            // nothing to show in the first place.
+            state.weather = match std::mem::replace(&mut state.weather, WeatherStatus::Loading) {
+                WeatherStatus::Refreshing(data) => {
+                    log::warn!("Background weather refresh failed, keeping last data: {error}");
+                    WeatherStatus::Loaded(data)
+                }
+                _ => WeatherStatus::Error(error),
+            };
             Task::none()
         }
         Message::ForecastFetched(Ok(response)) => {
@@ -190,8 +242,16 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::ForecastFetched(Err(error)) => {
-            log::warn!("Forecast fetch failed: {}", error);
-            state.forecast = ForecastStatus::Error;
+            state.forecast = match std::mem::replace(&mut state.forecast, ForecastStatus::Loading) {
+                ForecastStatus::Refreshing(data) => {
+                    log::warn!("Background forecast refresh failed, keeping last data: {error}");
+                    ForecastStatus::Loaded(data)
+                }
+                _ => {
+                    log::warn!("Forecast fetch failed: {error}");
+                    ForecastStatus::Error
+                }
+            };
             Task::none()
         }
         Message::OpenPreferences => {
