@@ -1,6 +1,6 @@
 [package]
 name = "open-weather-wizard"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Arunkumar Mourougappane <amouroug@buffalo.edu>"]
 description = "A simple, elegant desktop weather app with animated Lottie icons, a 5-day forecast, and a silent cross-faded auto-refresh, built in Rust with iced."
