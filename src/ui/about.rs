@@ -4,7 +4,7 @@
 //! Static content pulled from `Cargo.toml` via `env!` macros, mirroring the
 //! previous GTK `AboutDialog`.
 
-use iced::alignment::Horizontal;
+use iced::widget::text::Alignment as TextAlignment;
 use iced::widget::{button, column, container, image, row, scrollable, text};
 use iced::{Alignment, Element, Font, Length, font};
 
@@ -73,7 +73,7 @@ pub fn view<'a>() -> Element<'a, Message> {
             text(env!("CARGO_PKG_DESCRIPTION").replace('\n', " "))
                 .size(12)
                 .style(style::muted)
-                .align_x(Horizontal::Left)
+                .align_x(TextAlignment::Justified)
                 .width(CARD_WIDTH),
         );
 
