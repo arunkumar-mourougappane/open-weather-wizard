@@ -90,6 +90,7 @@ pub enum Message {
     OpenAbout,
     WindowCloseRequested(window::Id),
     AnimationTick,
+    OpenUrl(String),
 
     Preferences(preferences::Message),
 }
@@ -212,7 +213,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 return Task::none();
             }
             let (id, open_task) = window::open(window::Settings {
-                size: Size::new(420.0, 360.0),
+                size: Size::new(420.0, 440.0),
                 resizable: false,
                 icon: crate::ui::icons::load_window_icon("icon/icon.png"),
                 ..window::Settings::default()
@@ -221,6 +222,12 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             open_task.discard()
         }
         Message::AnimationTick => Task::none(),
+        Message::OpenUrl(url) => {
+            if let Err(e) = open::that(&url) {
+                log::warn!("Failed to open URL {url}: {e}");
+            }
+            Task::none()
+        }
         Message::WindowCloseRequested(id) => {
             if id == state.main_window {
                 return iced::exit();
@@ -307,8 +314,14 @@ pub fn theme(state: &AppState, _window: window::Id) -> Theme {
     if dark_mode { Theme::Dark } else { Theme::Light }
 }
 
-pub fn title(_state: &AppState, _window_id: window::Id) -> String {
-    "Weather Wizard".to_string()
+pub fn title(state: &AppState, window_id: window::Id) -> String {
+    if Some(window_id) == state.prefs_window {
+        "Preferences".to_string()
+    } else if Some(window_id) == state.about_window {
+        "About Weather Wizard".to_string()
+    } else {
+        "Weather Wizard".to_string()
+    }
 }
 
 /// Runs the application. The single entry point called from `main.rs`.

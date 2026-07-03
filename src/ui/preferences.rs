@@ -6,7 +6,7 @@
 //! holds the persisted `AppConfig`/`ConfigManager`.
 
 use iced::widget::{
-    button, column, container, pick_list, row, scrollable, text, text_input, toggler,
+    button, column, container, pick_list, row, scrollable, space, text, text_input, toggler,
 };
 use iced::{Alignment, Element, Font, Length, font};
 
@@ -114,7 +114,7 @@ pub fn update(state: &mut State, message: Message) {
 
 pub fn view(state: &State) -> Element<'_, Message> {
     let provider_section = section(
-        "Weather Provider",
+        "\u{2699} Weather Provider",
         column![
             labeled_row(
                 "Provider:",
@@ -138,7 +138,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
     );
 
     let location_section = section(
-        "Default Location",
+        "\u{25ce} Default Location",
         column![
             labeled_row(
                 "City:",
@@ -164,7 +164,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
     );
 
     let appearance_section = section(
-        "Appearance",
+        "\u{263e} Appearance",
         column![
             toggler(state.dark_mode)
                 .label("Dark mode")
@@ -180,6 +180,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let errors = state.validation_errors();
 
     let buttons = row![
+        space::horizontal(),
         button("Cancel")
             .on_press(Message::Cancel)
             .style(style::secondary_button),
@@ -190,15 +191,12 @@ pub fn view(state: &State) -> Element<'_, Message> {
     .spacing(8)
     .align_y(Alignment::Center);
 
-    let mut layout = column![
-        text("Preferences").size(20).font(BOLD),
-        provider_section,
-        location_section,
-        appearance_section,
-    ]
-    .spacing(16)
-    .padding(20)
-    .width(Length::Fill);
+    // The window's own title bar already reads "Preferences" (see
+    // `app::title`), so an in-content heading would just repeat it.
+    let mut layout = column![provider_section, location_section, appearance_section,]
+        .spacing(16)
+        .padding(20)
+        .width(Length::Fill);
 
     if !errors.is_empty() {
         let mut error_list = column![].spacing(2);
