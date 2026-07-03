@@ -1,8 +1,10 @@
-//! # Temperature Display Helpers
+//! # Weather Display Helpers
 //!
 //! The API is always fetched in Celsius/metric; the °C/°F preference only
 //! affects how values are formatted for display, so toggling it never
-//! triggers a re-fetch.
+//! triggers a re-fetch. Also home to a couple of small formatting helpers
+//! (compass direction, local time-of-day) shared between `main_screen` and
+//! `app::update`'s cross-fade field tracking.
 
 pub fn celsius_to_display(celsius: f64, fahrenheit: bool) -> f64 {
     if fahrenheit {
@@ -41,4 +43,31 @@ pub fn distance_to_display(meters: f64, fahrenheit: bool) -> f64 {
 
 pub fn distance_unit(fahrenheit: bool) -> &'static str {
     if fahrenheit { "mi" } else { "km" }
+}
+
+/// Meteorological degrees (0 = due north, clockwise) to a 16-point compass
+/// abbreviation.
+pub fn compass_direction(deg: i64) -> &'static str {
+    const DIRECTIONS: [&str; 16] = [
+        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW",
+        "NW", "NNW",
+    ];
+    let normalized = deg.rem_euclid(360) as f64;
+    let index = ((normalized / 22.5) + 0.5) as usize % 16;
+    DIRECTIONS[index]
+}
+
+/// Renders a Unix timestamp as a local 12-hour clock time using the API's
+/// `timezone` offset (seconds from UTC) -- avoids pulling in a date/time
+/// crate for what's ultimately just "HH:MM AM/PM".
+pub fn format_local_time(unix_ts: i64, tz_offset_secs: i64) -> String {
+    let local_secs = (unix_ts + tz_offset_secs).rem_euclid(86_400);
+    let hours24 = local_secs / 3600;
+    let minutes = (local_secs % 3600) / 60;
+    let period = if hours24 < 12 { "AM" } else { "PM" };
+    let hours12 = match hours24 % 12 {
+        0 => 12,
+        h => h,
+    };
+    format!("{hours12}:{minutes:02} {period}")
 }

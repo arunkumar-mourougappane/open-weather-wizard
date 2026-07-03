@@ -13,7 +13,11 @@ use iced::widget::Space;
 use iced::{Element, Size, Subscription, Task, Theme, window};
 
 use crate::config::{AppConfig, ConfigManager};
-use crate::ui::{about, main_screen, preferences};
+use crate::ui::temperature::{
+    celsius_to_display, compass_direction, distance_to_display, distance_unit, format_local_time,
+    speed_to_display, speed_unit, unit_symbol,
+};
+use crate::ui::{about, main_screen, preferences, transition};
 use crate::weather_api::forecast::ForecastResponse;
 use crate::weather_api::openweather_api::ApiResponse;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
@@ -103,6 +107,11 @@ pub struct AppState {
     /// already needed for the animated icons) that this stays fresh without
     /// its own timer.
     pub last_updated: Option<Instant>,
+    /// Drives the per-value cross-fade when a tracked field's freshly
+    /// fetched value differs from what was last displayed -- see
+    /// `ui::transition`. Noted in `update()` on fetch success, read (never
+    /// mutated) by view code.
+    pub value_tracker: transition::ValueTracker,
     main_window: window::Id,
     prefs_window: Option<window::Id>,
     prefs_state: Option<preferences::State>,
@@ -161,6 +170,66 @@ fn fetch_forecast_task(config: &AppConfig) -> Task<Message> {
     )
 }
 
+/// Records the freshly-formatted display value for each cross-faded
+/// current-conditions field -- `ui::main_screen`'s `hero_view`/`stats_view`
+/// read these same keys back via `ValueTracker::cross_fade`. Must be called
+/// with the *new* `response` before it overwrites `state.weather`, so the
+/// tracker can diff against whatever was noted last time.
+fn note_weather_transitions(
+    tracker: &mut transition::ValueTracker,
+    response: &ApiResponse,
+    use_fahrenheit: bool,
+) {
+    let unit = unit_symbol(use_fahrenheit);
+    let temp = celsius_to_display(response.main.temp, use_fahrenheit);
+    let feels_like = celsius_to_display(response.main.feels_like, use_fahrenheit);
+    let temp_min = celsius_to_display(response.main.temp_min, use_fahrenheit);
+    let temp_max = celsius_to_display(response.main.temp_max, use_fahrenheit);
+    let wind_speed = speed_to_display(response.wind.speed, use_fahrenheit);
+    let wind_unit = speed_unit(use_fahrenheit);
+    let compass = compass_direction(response.wind.deg);
+    let visibility = distance_to_display(response.visibility as f64, use_fahrenheit);
+    let visibility_unit = distance_unit(use_fahrenheit);
+    let sunrise = format_local_time(response.sys.sunrise, response.timezone);
+    let sunset = format_local_time(response.sys.sunset, response.timezone);
+
+    tracker.note("temp", &format!("{:.1}{unit}", temp));
+    tracker.note("feels_like", &format!("{:.0}{unit}", feels_like));
+    tracker.note("humidity", &format!("{}%", response.main.humidity));
+    tracker.note("wind", &format!("{:.0} {wind_unit} {compass}", wind_speed));
+    tracker.note("pressure", &format!("{} hPa", response.main.pressure));
+    tracker.note(
+        "visibility",
+        &format!("{:.1} {visibility_unit}", visibility),
+    );
+    tracker.note(
+        "high_low",
+        &format!("{:.0}{unit} / {:.0}{unit}", temp_max, temp_min),
+    );
+    tracker.note("sunrise", &sunrise);
+    tracker.note("sunset", &sunset);
+}
+
+/// Same idea as `note_weather_transitions`, for each forecast day's hi/lo
+/// and description -- `forecast_row::day_card` reads these back keyed by
+/// the day's index.
+fn note_forecast_transitions(
+    tracker: &mut transition::ValueTracker,
+    response: &ForecastResponse,
+    use_fahrenheit: bool,
+) {
+    let unit = unit_symbol(use_fahrenheit);
+    for (index, day) in response.days.iter().enumerate() {
+        let temp_max = celsius_to_display(day.temp_max, use_fahrenheit);
+        let temp_min = celsius_to_display(day.temp_min, use_fahrenheit);
+        tracker.note(
+            &format!("forecast_{index}_hilo"),
+            &format!("{:.0}{unit} / {:.0}{unit}", temp_max, temp_min),
+        );
+        tracker.note(&format!("forecast_{index}_desc"), &day.description);
+    }
+}
+
 /// Boots the application: loads config, opens the main window, and kicks off the
 /// first weather + forecast fetch.
 pub fn boot() -> (AppState, Task<Message>) {
@@ -180,6 +249,7 @@ pub fn boot() -> (AppState, Task<Message>) {
         weather: WeatherStatus::Loading,
         forecast: ForecastStatus::Loading,
         last_updated: None,
+        value_tracker: transition::ValueTracker::default(),
         main_window,
         prefs_window: None,
         prefs_state: None,
@@ -215,6 +285,11 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             ])
         }
         Message::WeatherFetched(Ok(response)) => {
+            note_weather_transitions(
+                &mut state.value_tracker,
+                &response,
+                state.config.use_fahrenheit,
+            );
             state.weather = WeatherStatus::Loaded(response);
             state.last_updated = Some(Instant::now());
             Task::none()
@@ -237,6 +312,11 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 "Forecast loaded for {}: {} day(s)",
                 response.location_name,
                 response.days.len()
+            );
+            note_forecast_transitions(
+                &mut state.value_tracker,
+                &response,
+                state.config.use_fahrenheit,
             );
             state.forecast = ForecastStatus::Loaded(response);
             Task::none()

@@ -13,3 +13,4 @@ pub mod preferences;
 pub mod skeleton;
 pub mod style;
 pub mod temperature;
+pub mod transition;
