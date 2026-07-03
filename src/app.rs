@@ -294,11 +294,17 @@ pub fn subscription(_state: &AppState) -> Subscription<Message> {
 }
 
 pub fn theme(state: &AppState, _window: window::Id) -> Theme {
-    if state.config.dark_mode {
-        Theme::Dark
-    } else {
-        Theme::Light
-    }
+    // Preview the toggle live, across every window, as soon as it's
+    // flipped in Preferences -- not just after Save. `prefs_state` is a
+    // draft; falling back to the persisted config when no Preferences
+    // window is open (or once it's closed via Cancel) means an
+    // unsaved/discarded toggle doesn't leave the theme changed behind it.
+    let dark_mode = state
+        .prefs_state
+        .as_ref()
+        .map_or(state.config.dark_mode, |prefs| prefs.dark_mode);
+
+    if dark_mode { Theme::Dark } else { Theme::Light }
 }
 
 pub fn title(_state: &AppState, _window_id: window::Id) -> String {
