@@ -10,6 +10,7 @@ use iced::widget::{button, column, container, row, scrollable, space, text};
 use iced::{Alignment, Element, Font, Length, font};
 
 use crate::app::{AppState, Message, WeatherStatus};
+use crate::ui::temperature::{celsius_to_display, unit_symbol};
 use crate::ui::{forecast_row, icons, spinner, style};
 use crate::weather_api::openweather_api::get_weather_symbol;
 
@@ -79,19 +80,21 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                 weather_data.name.clone()
             };
 
+            let use_fahrenheit = state.config.use_fahrenheit;
+            let unit = unit_symbol(use_fahrenheit);
+            let temp = celsius_to_display(weather_data.main.temp, use_fahrenheit);
+            let feels_like = celsius_to_display(weather_data.main.feels_like, use_fahrenheit);
+
             let mut card = column![
                 icons::view(symbol, 128.0),
                 text(location_text).size(24).font(BOLD),
-                text(format!("{:.1}\u{b0}C", weather_data.main.temp))
+                text(format!("{:.1}{unit}", temp))
                     .size(34)
                     .font(BOLD)
                     .style(style::accent),
-                text(format!(
-                    "Feels like {:.0}\u{b0}C",
-                    weather_data.main.feels_like
-                ))
-                .size(13)
-                .style(style::muted),
+                text(format!("Feels like {:.0}{unit}", feels_like))
+                    .size(13)
+                    .style(style::muted),
                 text(weather.description.clone()).size(18).font(ITALIC),
                 text(format!("Humidity: {}%", weather_data.main.humidity))
                     .size(14)
@@ -119,7 +122,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     .spacing(16)
     .padding(16);
 
-    if let Some(forecast) = forecast_row::view(&state.forecast) {
+    if let Some(forecast) = forecast_row::view(&state.forecast, state.config.use_fahrenheit) {
         layout = layout.push(forecast);
     }
 

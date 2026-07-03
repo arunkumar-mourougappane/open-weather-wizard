@@ -38,6 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             country: "US".to_string(),
         },
         dark_mode: false,
+        use_fahrenheit: false,
     };
 
     config.set_api_token("demo_api_token_12345");
