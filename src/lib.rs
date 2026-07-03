@@ -5,8 +5,9 @@
 //!
 //! ## Modules
 //!
+//! - **`app`**: The iced application root -- state, messages, `update()`/`view()`.
 //! - **`config`**: Handles loading, saving, and managing application configuration.
-//! - **`ui`**: Contains all logic for building and managing the GTK user interface.
+//! - **`ui`**: Per-screen views for the [iced](https://github.com/iced-rs/iced) user interface.
 //! - **`weather_api`**: Provides an abstraction layer for fetching data from various
 //!   weather services.
 
