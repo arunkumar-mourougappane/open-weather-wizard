@@ -82,7 +82,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-installer-${{ matrix.os }}
-          path: target/dist/*.{dmg,deb,exe}
+          path: |
+            target/dist/*.dmg
+            target/dist/*.deb
+            target/dist/*.exe
           if-no-files-found: error
 
   release:
