@@ -212,8 +212,11 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             if state.about_window.is_some() {
                 return Task::none();
             }
+            const ABOUT_SIZE: Size = Size::new(420.0, 440.0);
             let (id, open_task) = window::open(window::Settings {
-                size: Size::new(420.0, 440.0),
+                size: ABOUT_SIZE,
+                min_size: Some(ABOUT_SIZE),
+                max_size: Some(ABOUT_SIZE),
                 resizable: false,
                 icon: crate::ui::icons::load_window_icon("icon/icon.png"),
                 ..window::Settings::default()
