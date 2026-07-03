@@ -21,9 +21,11 @@ const BOLD: Font = Font {
 };
 
 /// `day_card`'s content column width (100) plus its container's padding
-/// (10 on each side).
-const CARD_WIDTH: f32 = 120.0;
-const CARD_SPACING: f32 = 12.0;
+/// (10 on each side). `pub(crate)` so `ui::skeleton` can size its
+/// placeholder cards identically -- the skeleton shouldn't reflow when real
+/// cards swap in.
+pub(crate) const CARD_WIDTH: f32 = 120.0;
+pub(crate) const CARD_SPACING: f32 = 12.0;
 
 /// Total width `n` cards need laid out in a row with `CARD_SPACING` between
 /// them (no trailing gap after the last card).
@@ -39,7 +41,7 @@ fn cards_width(n: usize) -> f32 {
 /// explicitly because `responsive` defaults to `Length::Fill` for height,
 /// which would otherwise try to consume all remaining vertical space in the
 /// column it sits in.
-const ROW_HEIGHT: f32 = 140.0;
+pub(crate) const ROW_HEIGHT: f32 = 140.0;
 
 /// Renders the forecast row, or `None` if there's nothing to show at all
 /// (loading with no prior data yet, or an error).
