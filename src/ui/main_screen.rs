@@ -86,6 +86,12 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
                     .size(34)
                     .font(BOLD)
                     .style(style::accent),
+                text(format!(
+                    "Feels like {:.0}\u{b0}C",
+                    weather_data.main.feels_like
+                ))
+                .size(13)
+                .style(style::muted),
                 text(weather.description.clone()).size(18).font(ITALIC),
                 text(format!("Humidity: {}%", weather_data.main.humidity))
                     .size(14)
