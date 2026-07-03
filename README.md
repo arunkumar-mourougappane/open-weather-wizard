@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon/icon.png" alt="Open Weather Wizard icon" width="128" height="128">
+</p>
+
 # Open Weather Wizard
 
 [![CI](https://github.com/arunkumar-mourougappane/open-weather-wizard/actions/workflows/ci.yml/badge.svg)](https://github.com/arunkumar-mourougappane/open-weather-wizard/actions/workflows/ci.yml)
@@ -111,32 +115,6 @@ Delete the file to reset to defaults.
 **Reset configuration:**
 
 - Delete the config file at the path listed above and restart the app.
-
-## Project Structure
-
-```text
-.
-├── assets/
-│   ├── lottie/           # Hand-authored Lottie animations (one per weather condition)
-│   ├── static/           # Static SVG fallback icons
-│   ├── animated/         # Reference-only CSS-animated SVGs the Lottie set was authored from
-│   └── icon/             # App icon
-├── docs/                 # Architecture, UI design, and icon-mapping notes
-├── examples/              # Demo/integration-test binaries
-├── src/
-│   ├── app.rs             # iced root: AppState, Message, update(), view(), subscription()
-│   ├── config.rs          # Config load/save
-│   ├── lib.rs              # Library crate root
-│   ├── main.rs             # Binary entry point
-│   ├── ui/                 # Per-screen views (main screen, forecast row, preferences, about,
-│   │                       # skeleton loading state, cross-fade transitions, shared styling)
-│   │   └── lottie/         # velato/vello <-> iced wgpu integration
-│   └── weather_api/        # Provider trait + OpenWeatherMap and Google Weather implementations
-├── Cargo.toml
-├── install.sh              # Linux install script (binary + desktop integration)
-├── open-weather-wizard.desktop
-└── LICENSE
-```
 
 ## Contributing
 
