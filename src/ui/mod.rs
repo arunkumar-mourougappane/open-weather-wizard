@@ -12,3 +12,4 @@ pub mod main_screen;
 pub mod preferences;
 pub mod spinner;
 pub mod style;
+pub mod temperature;
