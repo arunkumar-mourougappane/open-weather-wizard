@@ -10,6 +10,7 @@ use iced::widget::{button, column, container, row, scrollable, space, text, tool
 use iced::{Alignment, Color, Element, Font, Length, font};
 
 use crate::app::{AppState, ForecastStatus, Message, WeatherStatus};
+use crate::config::WeatherApiProvider;
 use crate::ui::temperature::{
     celsius_to_display, compass_direction, distance_to_display, distance_unit, format_local_time,
     speed_to_display, speed_unit, unit_symbol,
@@ -163,8 +164,48 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
     // or a display with unusual scaling), scroll instead of letting iced
     // silently squeeze fixed-size widgets like the animated icons into
     // whatever space is left -- that squeeze is what actually distorted them,
-    // not the icons' own sizing.
-    scrollable(layout).height(Length::Fill).into()
+    // not the icons' own sizing. The provider ribbon sits outside the
+    // scrollable, as a sibling `column` entry, so it stays pinned to the
+    // bottom of the window rather than scrolling away with the content.
+    column![
+        scrollable(layout).height(Length::Fill),
+        provider_ribbon(&state.config.weather_provider),
+    ]
+    .into()
+}
+
+/// A thin footer strip naming whichever provider is currently powering the
+/// displayed data, linked to that provider's own homepage -- config-driven
+/// rather than tracked per-fetch, since a fetch always uses whatever
+/// provider is currently configured (there's no per-request override). Uses
+/// its own display label rather than `WeatherApiProvider`'s `Display` impl
+/// (which renders "OpenWeather" as one word, matching the service's own
+/// branding elsewhere, e.g. Preferences).
+fn provider_ribbon(provider: &WeatherApiProvider) -> Element<'_, Message> {
+    let (label, homepage) = match provider {
+        WeatherApiProvider::OpenWeather => ("Open Weather", "https://openweathermap.org/"),
+        WeatherApiProvider::GoogleWeather => (
+            "Google Weather",
+            "https://mapsplatform.google.com/maps-products/weather/",
+        ),
+    };
+
+    container(
+        row![
+            space::horizontal(),
+            text("Powered by").size(11).style(style::muted),
+            button(text(label).size(11))
+                .on_press(Message::OpenUrl(homepage.to_string()))
+                .style(style::link_button)
+                .padding(0),
+        ]
+        .spacing(4)
+        .align_y(Alignment::Center),
+    )
+    .width(Length::Fill)
+    .padding(6)
+    .style(style::ribbon)
+    .into()
 }
 
 /// The left-hand hero: icon, location, big temperature, and a short

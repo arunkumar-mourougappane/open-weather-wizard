@@ -69,6 +69,24 @@ pub fn day_card(theme: &Theme) -> container::Style {
     }
 }
 
+/// The thin footer ribbon naming the currently-active weather provider --
+/// pinned to the bottom of the main window (see `main_screen::view`),
+/// deliberately flatter/lower-contrast than `panel`/`day_card` since it's an
+/// attribution strip, not another content card.
+pub fn ribbon(theme: &Theme) -> container::Style {
+    let palette = theme.extended_palette();
+
+    container::Style {
+        background: Some(Background::Color(palette.background.weak.color)),
+        border: Border {
+            color: palette.background.strong.color,
+            width: 1.0,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
 /// Today's forecast card: same shape as `day_card`, but with an accent
 /// border so it stands out at a glance from the other four days.
 pub fn day_card_today(theme: &Theme) -> container::Style {
