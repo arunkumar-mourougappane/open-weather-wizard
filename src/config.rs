@@ -136,6 +136,26 @@ impl AppConfig {
             Err(e) => Err(format!("Failed to read API token: {e}")),
         }
     }
+
+    /// Removes the API token from the OS's secure credential store
+    /// entirely, rather than overwriting it with an empty string --
+    /// deleting the credential itself is what `examples/clear_credentials.rs`
+    /// needs, and matches what a user uninstalling the app or switching
+    /// machines would actually want. Not currently exposed anywhere in the
+    /// app's own UI (Preferences only ever sets a new token); a missing
+    /// entry is not an error, since that's already the desired end state.
+    // The binary crate's own `mod config` (src/main.rs) never calls this --
+    // only `examples/clear_credentials.rs` does, which links against the
+    // library crate's copy, a separate compilation -- hence the `allow`
+    // (same reasoning as `ConfigManager::for_path` above).
+    #[allow(dead_code)]
+    pub fn delete_api_token(&self) -> Result<(), String> {
+        match keyring_entry()?.delete_credential() {
+            Ok(()) => Ok(()),
+            Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(format!("Failed to delete API token: {e}")),
+        }
+    }
 }
 
 /// The single `keyring::Entry` this app ever uses for the OpenWeatherMap API
