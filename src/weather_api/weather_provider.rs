@@ -38,9 +38,7 @@ pub trait WeatherProvider {
     /// Fetches a multi-day forecast for a given location.
     ///
     /// # Errors
-    /// Returns an `ApiError` if the data cannot be fetched. Providers without a real
-    /// forecast integration (e.g. the Google Weather mock) may return an empty
-    /// `ForecastResponse` rather than an error.
+    /// Returns an `ApiError` if the data cannot be fetched.
     async fn get_forecast(&self, location: &LocationConfig) -> Result<ForecastResponse, ApiError>;
 
     /// Returns the display name of the weather provider (e.g., "OpenWeather").
@@ -78,9 +76,12 @@ impl WeatherProviderFactory {
                     token,
                 )))
             }
-            WeatherApiProvider::GoogleWeather => Ok(Box::new(
-                super::google_weather_api::GoogleWeatherProvider::new(),
-            )),
+            WeatherApiProvider::GoogleWeather => {
+                let token = api_token.ok_or("Google Weather API requires an API token")?;
+                Ok(Box::new(
+                    super::google_weather_api::GoogleWeatherProvider::new(token),
+                ))
+            }
         }
     }
 }

@@ -86,14 +86,16 @@ problem that doesn't exist here.
 
 ### Fetch lifecycle
 
-`RefreshRequested` (manual, via Preferences Save) and `Tick` (the 30s
-auto-refresh subscription) both set `weather`/`forecast` to `Loading` and
-return `Task::batch([fetch_weather_task, fetch_forecast_task])`
-(`Task::perform` wrapping the existing `WeatherProviderFactory` +
-`WeatherProvider::get_weather`/`get_forecast` calls). The two fetches resolve
-**independently** — `WeatherFetched`/`ForecastFetched` each update their own
-status — so a forecast failure, or Google Weather's intentional empty
-placeholder, never blanks out current conditions.
+`RefreshRequested` (manual, via Preferences Save) and `Tick` (the
+auto-refresh subscription — 30s for OpenWeatherMap, 15 minutes for Google
+Weather to stay within its free-tier call quota, see `GOOGLE_WEATHER_
+REFRESH_INTERVAL` in `src/app.rs` and `docs/GOOGLE_WEATHER_API.md`) both set
+`weather`/`forecast` to `Loading` and return `Task::batch([fetch_weather_task,
+fetch_forecast_task])` (`Task::perform` wrapping the existing
+`WeatherProviderFactory` + `WeatherProvider::get_weather`/`get_forecast`
+calls). The two fetches resolve **independently** — `WeatherFetched`/
+`ForecastFetched` each update their own status — so a forecast failure never
+blanks out current conditions.
 
 ### Subscriptions
 
@@ -172,19 +174,25 @@ symbol.
 ## Testing
 
 All pre-existing tests in `src/lib.rs` (`config` roundtrip/serialization,
-`WeatherProviderFactory`, `Arc<Mutex<AppConfig>>` thread-safety,
-`GoogleWeatherProvider::get_weather`) were kept unchanged — none depended on
-GTK. Added:
+`WeatherProviderFactory`, `Arc<Mutex<AppConfig>>` thread-safety) were kept
+unchanged — none depended on GTK. Added:
 
 - `test_forecast_aggregation` — the one genuinely new nontrivial business
   logic (`aggregate_daily`'s daily bucketing/midday-condition selection),
   exercised against a hand-built fixture spanning two days of mixed
   conditions.
-- `test_google_weather_forecast_is_empty` — confirms the empty-placeholder
-  contract for the mock provider.
 - `test_lottie_assets_parse` — confirms the four hand-authored Lottie JSON
   files under `assets/lottie/` are valid, non-empty compositions; catches
   malformed JSON before it reaches the animated-icon widget.
+
+`GoogleWeatherProvider` (`src/weather_api/google_weather_api.rs`) is a real
+network-backed provider now, not a mock — its `#[cfg(test)]` module tests
+the pure/deterministic pieces only (condition-type mapping, unit
+conversions, response deserialization against hand-built JSON fixtures, and
+RFC 3339/timezone resolution), the same fixture-based philosophy as
+`test_forecast_aggregation`, since `cargo test` has neither network access
+nor a real API key. `examples/google_weather_test.rs` is the live smoke test
+for the actual HTTP integration, run manually (see `docs/GOOGLE_WEATHER_API.md`).
 
 `view()` functions are not unit-tested (no established snapshot-testing
 tooling in this codebase's dependency budget, and asserting on `Element`

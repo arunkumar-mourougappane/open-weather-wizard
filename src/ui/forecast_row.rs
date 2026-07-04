@@ -3,9 +3,11 @@
 //! A horizontally-scrollable row of day cards (icon + hi/lo + short description),
 //! rendered below the current-conditions card on the main screen. Omitted entirely
 //! while loading or on error (either already communicated elsewhere in the UI),
-//! but a provider with no real forecast integration (e.g. the Google Weather
-//! mock) gets an explicit muted hint rather than the row just silently
-//! vanishing, which otherwise reads as a bug rather than a provider limitation.
+//! but a provider with no real forecast integration gets an explicit muted
+//! hint rather than the row just silently vanishing, which otherwise reads
+//! as a bug rather than a provider limitation. Both current providers
+//! (OpenWeather, Google Weather) return real forecasts today; this path
+//! exists for future providers that might not.
 
 use iced::widget::{column, container, mouse_area, responsive, row, scrollable, text};
 use iced::{Alignment, Element, Font, Length, font};

@@ -134,9 +134,15 @@ mod tests {
             WeatherProviderFactory::create_provider(&WeatherApiProvider::OpenWeather, None);
         assert!(result.is_err());
 
-        // Test Google Weather provider (doesn't need API key)
+        // Google Weather now requires a real API token, same as OpenWeather.
         let result =
             WeatherProviderFactory::create_provider(&WeatherApiProvider::GoogleWeather, None);
+        assert!(result.is_err());
+
+        let result = WeatherProviderFactory::create_provider(
+            &WeatherApiProvider::GoogleWeather,
+            Some("test_key".to_string()),
+        );
         assert!(result.is_ok());
     }
 
@@ -178,27 +184,6 @@ mod tests {
             assert_eq!(config_guard.location.city, "Updated City");
             assert_eq!(config_guard.get_api_token().unwrap(), "new_token");
         }
-    }
-
-    /// An asynchronous test to verify that the mock `GoogleWeatherProvider` works as expected.
-    #[tokio::test]
-    async fn test_google_weather_provider() {
-        use crate::weather_api::google_weather_api::GoogleWeatherProvider;
-        use crate::weather_api::weather_provider::WeatherProvider;
-
-        let provider = GoogleWeatherProvider::new();
-        let location = LocationConfig {
-            city: "Test City".to_string(),
-            state: "TS".to_string(),
-            country: "TC".to_string(),
-        };
-
-        let result = provider.get_weather(&location).await;
-        assert!(result.is_ok());
-
-        let weather_data = result.unwrap();
-        assert_eq!(weather_data.name, "Test City");
-        assert!(weather_data.weather[0].description.contains("mock"));
     }
 
     /// Verifies that `aggregate_daily` buckets 3-hourly entries by UTC calendar
@@ -282,28 +267,6 @@ mod tests {
         assert_eq!(day2.temp_max, 20.0);
         assert_eq!(day2.description, "Clear description");
         assert_eq!(day2.pop, 0.5);
-    }
-
-    /// Verifies that `GoogleWeatherProvider::get_forecast` returns an empty
-    /// placeholder rather than fabricated forecast data.
-    #[tokio::test]
-    async fn test_google_weather_forecast_is_empty() {
-        use crate::weather_api::google_weather_api::GoogleWeatherProvider;
-        use crate::weather_api::weather_provider::WeatherProvider;
-
-        let provider = GoogleWeatherProvider::new();
-        let location = LocationConfig {
-            city: "Test City".to_string(),
-            state: "TS".to_string(),
-            country: "TC".to_string(),
-        };
-
-        let result = provider.get_forecast(&location).await;
-        assert!(result.is_ok());
-
-        let forecast = result.unwrap();
-        assert_eq!(forecast.location_name, "Test City");
-        assert!(forecast.days.is_empty());
     }
 
     /// Verifies the hand-authored Lottie assets under `assets/lottie/` are

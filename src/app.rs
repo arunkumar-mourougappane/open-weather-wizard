@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use iced::widget::Space;
 use iced::{Element, Size, Subscription, Task, Theme, window};
 
-use crate::config::{AppConfig, ConfigManager};
+use crate::config::{AppConfig, ConfigManager, WeatherApiProvider};
 use crate::ui::temperature::{
     celsius_to_display, compass_direction, distance_to_display, distance_unit, format_local_time,
     speed_to_display, speed_unit, unit_symbol,
@@ -37,6 +37,13 @@ const MAIN_WINDOW_MIN_SIZE: Size = Size::new(480.0, 420.0);
 /// width needs at least this much room before fields start getting crushed.
 const PREFERENCES_WINDOW_MIN_SIZE: Size = Size::new(440.0, 400.0);
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
+/// A full refresh against the real Google Weather API costs 3 billable
+/// calls (`currentConditions:lookup` + two `forecast/days:lookup` calls --
+/// see `docs/GOOGLE_WEATHER_API.md`). At 15 minutes that's ~8,640 calls/month
+/// for one always-open instance, comfortably under Google's 10,000/month
+/// free tier; `AUTO_REFRESH_INTERVAL`'s 30s would blow through it in about a
+/// day.
+const GOOGLE_WEATHER_REFRESH_INTERVAL: Duration = Duration::from_secs(15 * 60);
 /// Drives redraws for the animated Lottie icons (~30fps); `icons::view`
 /// computes each frame from wall-clock time, so this tick carries no state of
 /// its own -- it exists purely to make iced re-invoke `view()` regularly.
@@ -469,9 +476,13 @@ pub fn view(state: &AppState, window_id: window::Id) -> Element<'_, Message> {
     Space::new().into()
 }
 
-pub fn subscription(_state: &AppState) -> Subscription<Message> {
+pub fn subscription(state: &AppState) -> Subscription<Message> {
+    let refresh_interval = match state.config.weather_provider {
+        WeatherApiProvider::GoogleWeather => GOOGLE_WEATHER_REFRESH_INTERVAL,
+        WeatherApiProvider::OpenWeather => AUTO_REFRESH_INTERVAL,
+    };
     Subscription::batch([
-        iced::time::every(AUTO_REFRESH_INTERVAL).map(Message::Tick),
+        iced::time::every(refresh_interval).map(Message::Tick),
         iced::time::every(ANIMATION_TICK_INTERVAL).map(|_| Message::AnimationTick),
         window::close_requests().map(Message::WindowCloseRequested),
     ])
