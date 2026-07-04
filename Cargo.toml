@@ -32,6 +32,7 @@ wgpu = "27.0.1"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 open = "5.3.2"
 keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service"] }
+jiff = "0.2.31"
 
 [[bin]]
 name = "open-weather-wizard"

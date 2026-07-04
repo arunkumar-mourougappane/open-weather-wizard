@@ -6,6 +6,16 @@ become the body of the GitHub Release created by
 
 ## Unreleased
 
+**Providers**
+
+- Google Weather is now a real, live provider (Google Maps Platform's
+  Weather API) instead of a hardcoded mock — current conditions and a real
+  5-day forecast, both requiring your own Google Cloud API key (entered the
+  same way as the OpenWeatherMap token, in Preferences). Because Google's
+  free tier is capped at 10,000 calls/month, this provider auto-refreshes
+  every 15 minutes instead of OpenWeatherMap's 30 seconds. See
+  `docs/GOOGLE_WEATHER_API.md` for the full integration details.
+
 ## v0.2.0
 
 The GTK4 UI from v0.1.0 is gone — the app is rebuilt from scratch on

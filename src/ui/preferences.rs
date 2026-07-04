@@ -75,10 +75,9 @@ impl State {
         if self.country_input.trim().is_empty() {
             errors.push("Country is required.".to_string());
         }
-        // Only OpenWeather actually needs a token; the Google Weather mock
-        // provider works with none (see WeatherProvider::requires_api_key).
-        if self.provider == WeatherApiProvider::OpenWeather && self.token_input.trim().is_empty() {
-            errors.push("API Token is required for OpenWeather.".to_string());
+        // Both providers require a token (see WeatherProvider::requires_api_key).
+        if self.token_input.trim().is_empty() {
+            errors.push(format!("API Token is required for {}.", self.provider));
         }
 
         errors
