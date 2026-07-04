@@ -190,6 +190,17 @@ impl ConfigManager {
         Ok(Self { config_path })
     }
 
+    /// Whether a config file already exists on disk -- the signal `app::boot`
+    /// uses to distinguish a fresh install (no file yet, so nothing has ever
+    /// been configured) from a returning user, since `load_config` itself
+    /// can't tell the difference (a missing or unparsable file both silently
+    /// fall back to `AppConfig::default()`). Must be checked *before*
+    /// calling `load_config`, which doesn't create the file itself --  only
+    /// `save_config` does.
+    pub fn config_exists(&self) -> bool {
+        self.config_path.exists()
+    }
+
     /// Points a `ConfigManager` at an arbitrary file, bypassing the real OS
     /// config directory -- so tests can exercise `load_config`/`save_config`
     /// (in particular the legacy-token migration, which needs real file

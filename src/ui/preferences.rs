@@ -32,6 +32,12 @@ pub struct State {
     pub country_input: String,
     pub dark_mode: bool,
     pub use_fahrenheit: bool,
+    /// Set by `app::boot` when this window was opened automatically because
+    /// no config file existed yet (see `ConfigManager::config_exists`).
+    /// Purely cosmetic -- swaps in a welcome banner (`view`) and the
+    /// window's title (`app::title`); every field and validation rule
+    /// behaves identically either way.
+    pub is_first_run: bool,
 }
 
 impl State {
@@ -44,6 +50,7 @@ impl State {
             country_input: config.location.country.clone(),
             dark_mode: config.dark_mode,
             use_fahrenheit: config.use_fahrenheit,
+            is_first_run: false,
         }
     }
 
@@ -93,12 +100,18 @@ pub enum Message {
     CountryChanged(String),
     DarkModeToggled(bool),
     UnitsToggled(bool),
+    /// The "Get an API key" link -- intercepted by the parent (see
+    /// `src/app.rs`) and turned into `Message::OpenUrl`, since opening a
+    /// browser is an app-level concern, not something this module does
+    /// itself.
+    OpenUrl(String),
     Save,
     Cancel,
 }
 
-/// Mutates field-edit messages; `Save`/`Cancel` are intercepted by the parent
-/// `AppState::update` (see `src/app.rs`) since they need access to `AppConfig`.
+/// Mutates field-edit messages; `Save`/`Cancel`/`OpenUrl` are intercepted by
+/// the parent `AppState::update` (see `src/app.rs`) since they need access to
+/// `AppConfig`/the OS's URL opener respectively.
 pub fn update(state: &mut State, message: Message) {
     match message {
         Message::ProviderSelected(provider) => state.provider = provider,
@@ -108,13 +121,31 @@ pub fn update(state: &mut State, message: Message) {
         Message::CountryChanged(value) => state.country_input = value,
         Message::DarkModeToggled(value) => state.dark_mode = value,
         Message::UnitsToggled(value) => state.use_fahrenheit = value,
-        Message::Save | Message::Cancel => {
+        Message::OpenUrl(_) | Message::Save | Message::Cancel => {
             // Handled by the parent; nothing to do locally.
         }
     }
 }
 
+/// Where to get an API key for each provider, and a matching link label --
+/// shown under the API Token field regardless of first-run status, since
+/// switching providers later needs the same pointer.
+fn api_key_hint(provider: &WeatherApiProvider) -> (&'static str, &'static str) {
+    match provider {
+        WeatherApiProvider::OpenWeather => (
+            "Get an OpenWeatherMap API key",
+            "https://home.openweathermap.org/users/sign_up",
+        ),
+        WeatherApiProvider::GoogleWeather => (
+            "Get a Google Weather API key",
+            "https://developers.google.com/maps/documentation/weather/overview",
+        ),
+    }
+}
+
 pub fn view(state: &State) -> Element<'_, Message> {
+    let (hint_label, hint_url) = api_key_hint(&state.provider);
+
     let provider_section = section(
         "\u{2699} Weather Provider",
         column![
@@ -134,6 +165,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
                     .on_input(Message::TokenChanged)
                     .into()
             ),
+            api_key_hint_row(hint_label, hint_url),
         ]
         .spacing(12)
         .into(),
@@ -193,12 +225,35 @@ pub fn view(state: &State) -> Element<'_, Message> {
     .spacing(8)
     .align_y(Alignment::Center);
 
-    // The window's own title bar already reads "Preferences" (see
-    // `app::title`), so an in-content heading would just repeat it.
-    let mut layout = column![provider_section, location_section, appearance_section,]
-        .spacing(16)
-        .padding(20)
-        .width(Length::Fill);
+    // Normally the window's own title bar already reads "Preferences" (see
+    // `app::title`), so an in-content heading would just repeat it -- but on
+    // first run the title bar instead reads "Welcome to Weather Wizard",
+    // and this banner is the one place that explains *why* the window
+    // opened on its own and what the three sections below are for.
+    let mut layout = column![].spacing(16).padding(20).width(Length::Fill);
+
+    if state.is_first_run {
+        layout = layout.push(
+            column![
+                text("Welcome to Weather Wizard!")
+                    .size(16)
+                    .font(BOLD)
+                    .style(style::accent),
+                text(
+                    "Choose a weather provider, add its API key, and set your \
+                     default location to get started."
+                )
+                .size(12)
+                .style(style::muted),
+            ]
+            .spacing(4),
+        );
+    }
+
+    layout = layout
+        .push(provider_section)
+        .push(location_section)
+        .push(appearance_section);
 
     if !errors.is_empty() {
         let mut error_list = column![].spacing(2);
@@ -235,4 +290,18 @@ fn labeled_row<'a>(label: &'a str, field: Element<'a, Message>) -> Element<'a, M
         .spacing(12)
         .align_y(Alignment::Center)
         .into()
+}
+
+/// The "Get an API key" link under the API Token field, indented to align
+/// under the input rather than the label (matching `labeled_row`'s 160px
+/// label column).
+fn api_key_hint_row(label: &'static str, url: &'static str) -> Element<'static, Message> {
+    row![
+        space::horizontal().width(160),
+        button(text(label).size(12))
+            .on_press(Message::OpenUrl(url.to_string()))
+            .style(style::link_button)
+            .padding(0),
+    ]
+    .into()
 }
