@@ -29,7 +29,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     config.location = LocationConfig {
         city: "London".to_string(),
         state: "".to_string(),
-        country: "UK".to_string(),
+        // OpenWeatherMap's geocoding endpoint expects an ISO 3166-1 alpha-2
+        // country code -- "UK" isn't one (the correct code is "GB") and
+        // silently returns zero results rather than an error.
+        country: "GB".to_string(),
     };
 
     // Never hardcode a real API key in source -- read it from the
@@ -66,6 +69,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("\n⚠️  OpenWeather API call failed: {:?}", e);
             println!("   This might be due to network issues or API key limitations.");
             println!("   The provider factory and configuration system work correctly.");
+        }
+    }
+
+    match provider.get_forecast(&config.location).await {
+        Ok(forecast) => {
+            println!("\n✅ OpenWeather forecast fetched!");
+            for day in &forecast.days {
+                println!(
+                    "   {}: {:.0}°C / {:.0}°C -- {}",
+                    day.date, day.temp_max, day.temp_min, day.description
+                );
+            }
+        }
+        Err(e) => {
+            println!("\n⚠️  OpenWeather forecast call failed: {:?}", e);
         }
     }
 
