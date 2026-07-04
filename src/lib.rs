@@ -7,12 +7,15 @@
 //!
 //! - **`app`**: The iced application root -- state, messages, `update()`/`view()`.
 //! - **`config`**: Handles loading, saving, and managing application configuration.
+//! - **`geolocation`**: Best-effort IP-based location detection, used to prefill
+//!   the "Home" location during first-run setup.
 //! - **`ui`**: Per-screen views for the [iced](https://github.com/iced-rs/iced) user interface.
 //! - **`weather_api`**: Provides an abstraction layer for fetching data from various
 //!   weather services.
 
 pub mod app;
 pub mod config;
+pub mod geolocation;
 pub mod ui;
 pub mod weather_api;
 
