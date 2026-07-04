@@ -6,6 +6,13 @@ become the body of the GitHub Release created by
 
 ## Unreleased
 
+**Interface**
+
+- First-run setup: if no config file exists yet, Preferences now opens
+  automatically alongside the main window with a welcome banner and a "Get
+  an API key" link for whichever provider is selected, instead of silently
+  attempting a fetch that's guaranteed to fail with no token configured.
+
 **Providers**
 
 - Google Weather is now a real, live provider (Google Maps Platform's

@@ -117,6 +117,33 @@ mod tests {
         let _ = std::fs::remove_file(&config_path);
     }
 
+    /// Verifies `ConfigManager::config_exists` -- the signal `app::boot`
+    /// uses to detect a fresh install (see issue #38) -- correctly reports
+    /// `false` before any config has ever been saved and `true` immediately
+    /// after `save_config` first writes the file.
+    #[test]
+    fn test_config_manager_detects_first_run() {
+        let config_path = std::env::temp_dir().join(format!(
+            "open-weather-wizard-first-run-test-{:?}.json",
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_file(&config_path);
+
+        let manager = ConfigManager::for_path(config_path.clone());
+        assert!(
+            !manager.config_exists(),
+            "no config file has been saved yet"
+        );
+
+        manager.save_config(&AppConfig::default()).unwrap();
+        assert!(
+            manager.config_exists(),
+            "config_exists should be true immediately after save_config"
+        );
+
+        let _ = std::fs::remove_file(&config_path);
+    }
+
     /// Tests the `WeatherProviderFactory`'s ability to create providers.
     ///
     /// This test covers both successful creation and error handling for missing API keys.

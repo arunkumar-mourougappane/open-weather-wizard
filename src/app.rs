@@ -127,6 +127,12 @@ pub struct AppState {
     prefs_window: Option<window::Id>,
     prefs_state: Option<preferences::State>,
     about_window: Option<window::Id>,
+    /// Whether the Preferences window currently open (if any) was opened
+    /// automatically because no config file existed at boot -- read by
+    /// `title()` to swap in a welcome message, and cleared once that
+    /// window's Save/Cancel resolves it (see `update`) so later manual
+    /// reopens via the toolbar never show first-run copy.
+    is_first_run: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -245,20 +251,49 @@ fn note_forecast_transitions(
     }
 }
 
+/// The Preferences window's fixed size/icon -- shared by `boot`'s first-run
+/// auto-open and `Message::OpenPreferences`'s manual one, so the two open
+/// paths can never drift apart.
+fn preferences_window_settings() -> window::Settings {
+    window::Settings {
+        size: Size::new(520.0, 560.0),
+        min_size: Some(PREFERENCES_WINDOW_MIN_SIZE),
+        icon: crate::ui::icons::load_window_icon("icon/icon.png"),
+        ..window::Settings::default()
+    }
+}
+
 /// Boots the application: loads config, opens the main window, and kicks off the
-/// first weather + forecast fetch.
+/// first weather + forecast fetch -- unless no config file existed yet (a
+/// fresh install), in which case Preferences opens automatically instead of
+/// firing a fetch that's guaranteed to fail against `AppConfig::default()`'s
+/// unset API token (see `docs`/issue #38 for why: `WeatherProviderFactory`
+/// requires a token for every provider now, and the default config has
+/// none).
 pub fn boot() -> (AppState, Task<Message>) {
     let config_manager = ConfigManager::new().expect("Failed to create config manager");
+    let is_first_run = !config_manager.config_exists();
     let config = config_manager.load_config();
 
-    let (main_window, open_task) = window::open(window::Settings {
+    let (main_window, main_open_task) = window::open(window::Settings {
         size: Size::new(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT),
         min_size: Some(MAIN_WINDOW_MIN_SIZE),
         icon: crate::ui::icons::load_window_icon("icon/icon.png"),
         ..window::Settings::default()
     });
 
-    let fetch_tasks = Task::batch([fetch_weather_task(&config), fetch_forecast_task(&config)]);
+    let (prefs_window, prefs_state, second_task) = if is_first_run {
+        let mut prefs_state = preferences::State::from_config(&config);
+        prefs_state.is_first_run = true;
+        let (id, prefs_open_task) = window::open(preferences_window_settings());
+        (Some(id), Some(prefs_state), prefs_open_task.discard())
+    } else {
+        (
+            None,
+            None,
+            Task::batch([fetch_weather_task(&config), fetch_forecast_task(&config)]),
+        )
+    };
 
     let state = AppState {
         weather: WeatherStatus::Loading,
@@ -267,14 +302,15 @@ pub fn boot() -> (AppState, Task<Message>) {
         value_tracker: transition::ValueTracker::default(),
         selected_forecast_day: None,
         main_window,
-        prefs_window: None,
-        prefs_state: None,
+        prefs_window,
+        prefs_state,
         about_window: None,
+        is_first_run,
         config,
         config_manager,
     };
 
-    (state, Task::batch([open_task.discard(), fetch_tasks]))
+    (state, Task::batch([main_open_task.discard(), second_task]))
 }
 
 pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
@@ -363,12 +399,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 return Task::none();
             }
             state.prefs_state = Some(preferences::State::from_config(&state.config));
-            let (id, open_task) = window::open(window::Settings {
-                size: Size::new(520.0, 560.0),
-                min_size: Some(PREFERENCES_WINDOW_MIN_SIZE),
-                icon: crate::ui::icons::load_window_icon("icon/icon.png"),
-                ..window::Settings::default()
-            });
+            let (id, open_task) = window::open(preferences_window_settings());
             state.prefs_window = Some(id);
             open_task.discard()
         }
@@ -411,6 +442,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             if state.prefs_window == Some(id) {
                 state.prefs_window = None;
                 state.prefs_state = None;
+                state.is_first_run = false;
                 return window::close(id);
             }
             if state.about_window == Some(id) {
@@ -437,6 +469,10 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             } else {
                 log::info!("Configuration saved successfully");
             }
+            // Whatever brought up first-run setup is now resolved -- a
+            // later manual reopen (toolbar gear icon) should show the
+            // ordinary "Preferences" copy, not the welcome banner again.
+            state.is_first_run = false;
             let close_task = state
                 .prefs_window
                 .take()
@@ -446,11 +482,15 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::Preferences(preferences::Message::Cancel) => {
             state.prefs_state = None;
+            state.is_first_run = false;
             state
                 .prefs_window
                 .take()
                 .map(window::close)
                 .unwrap_or_else(Task::none)
+        }
+        Message::Preferences(preferences::Message::OpenUrl(url)) => {
+            Task::done(Message::OpenUrl(url))
         }
         Message::Preferences(sub_message) => {
             if let Some(prefs_state) = state.prefs_state.as_mut() {
@@ -504,7 +544,11 @@ pub fn theme(state: &AppState, _window: window::Id) -> Theme {
 
 pub fn title(state: &AppState, window_id: window::Id) -> String {
     if Some(window_id) == state.prefs_window {
-        "Preferences".to_string()
+        if state.is_first_run {
+            "Welcome to Weather Wizard".to_string()
+        } else {
+            "Preferences".to_string()
+        }
     } else if Some(window_id) == state.about_window {
         "About Weather Wizard".to_string()
     } else {
