@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use iced::widget::Space;
 use iced::{Element, Size, Subscription, Task, Theme, window};
 
-use crate::config::{AppConfig, ConfigManager, WeatherApiProvider};
+use crate::config::{AppConfig, ConfigManager, LocationConfig, WeatherApiProvider};
 use crate::ui::temperature::{
     celsius_to_display, compass_direction, distance_to_display, distance_unit, format_local_time,
     speed_to_display, speed_unit, unit_symbol,
@@ -151,6 +151,11 @@ pub enum Message {
     /// or index `0` ("Today", redundant with the live current-conditions
     /// view), clears the selection back to live conditions.
     ForecastDaySelected(usize),
+    /// Result of `crate::geolocation::detect_location`, fired by
+    /// `Message::Preferences(preferences::Message::DetectLocationRequested)`.
+    /// Applies to whatever Preferences window is currently open, if any --
+    /// see `update`.
+    LocationDetected(Result<LocationConfig, String>),
 
     Preferences(preferences::Message),
 }
@@ -491,6 +496,41 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::Preferences(preferences::Message::OpenUrl(url)) => {
             Task::done(Message::OpenUrl(url))
+        }
+        Message::Preferences(preferences::Message::DetectLocationRequested) => {
+            let Some(prefs_state) = state.prefs_state.as_mut() else {
+                return Task::none();
+            };
+            prefs_state.is_detecting_location = true;
+            prefs_state.location_detection_error = None;
+            Task::perform(
+                crate::geolocation::detect_location(),
+                Message::LocationDetected,
+            )
+        }
+        Message::LocationDetected(result) => {
+            // The user may have already closed Preferences (or it was never
+            // open outside first-run) by the time this async lookup
+            // resolves -- nothing to apply the result to in that case.
+            let Some(prefs_state) = state.prefs_state.as_mut() else {
+                return Task::none();
+            };
+            prefs_state.is_detecting_location = false;
+            match result {
+                Ok(location) => {
+                    prefs_state.city_input = location.city;
+                    prefs_state.state_input = location.state;
+                    prefs_state.country_input = location.country;
+                }
+                Err(e) => {
+                    log::warn!("Location detection failed: {e}");
+                    prefs_state.location_detection_error = Some(
+                        "Couldn't detect your location automatically -- enter it manually."
+                            .to_string(),
+                    );
+                }
+            }
+            Task::none()
         }
         Message::Preferences(sub_message) => {
             if let Some(prefs_state) = state.prefs_state.as_mut() {

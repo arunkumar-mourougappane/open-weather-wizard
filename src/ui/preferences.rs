@@ -38,6 +38,16 @@ pub struct State {
     /// window's title (`app::title`); every field and validation rule
     /// behaves identically either way.
     pub is_first_run: bool,
+    /// Whether an IP-based location lookup (`Message::DetectLocationRequested`,
+    /// intercepted by `app::update`) is currently in flight -- disables the
+    /// "Detect my location" button and swaps its label so a slow/failed
+    /// lookup doesn't look like a dead button.
+    pub is_detecting_location: bool,
+    /// Set if the last detection attempt failed, cleared on the next
+    /// attempt or a successful one. Never blocks Save -- detection is a
+    /// convenience prefill, not a required step; the fields can always be
+    /// typed in by hand instead.
+    pub location_detection_error: Option<String>,
 }
 
 impl State {
@@ -51,6 +61,8 @@ impl State {
             dark_mode: config.dark_mode,
             use_fahrenheit: config.use_fahrenheit,
             is_first_run: false,
+            is_detecting_location: false,
+            location_detection_error: None,
         }
     }
 
@@ -105,13 +117,20 @@ pub enum Message {
     /// browser is an app-level concern, not something this module does
     /// itself.
     OpenUrl(String),
+    /// The "Detect my location" button -- intercepted by the parent, which
+    /// kicks off the async IP lookup (`crate::geolocation::detect_location`)
+    /// and reports back via the app-level `Message::LocationDetected`, since
+    /// firing an async `Task` isn't something this module's synchronous
+    /// `update` can do itself.
+    DetectLocationRequested,
     Save,
     Cancel,
 }
 
-/// Mutates field-edit messages; `Save`/`Cancel`/`OpenUrl` are intercepted by
-/// the parent `AppState::update` (see `src/app.rs`) since they need access to
-/// `AppConfig`/the OS's URL opener respectively.
+/// Mutates field-edit messages; `Save`/`Cancel`/`OpenUrl`/
+/// `DetectLocationRequested` are intercepted by the parent `AppState::update`
+/// (see `src/app.rs`) since they need access to `AppConfig`/the OS's URL
+/// opener/an async `Task` respectively.
 pub fn update(state: &mut State, message: Message) {
     match message {
         Message::ProviderSelected(provider) => state.provider = provider,
@@ -121,7 +140,10 @@ pub fn update(state: &mut State, message: Message) {
         Message::CountryChanged(value) => state.country_input = value,
         Message::DarkModeToggled(value) => state.dark_mode = value,
         Message::UnitsToggled(value) => state.use_fahrenheit = value,
-        Message::OpenUrl(_) | Message::Save | Message::Cancel => {
+        Message::OpenUrl(_)
+        | Message::DetectLocationRequested
+        | Message::Save
+        | Message::Cancel => {
             // Handled by the parent; nothing to do locally.
         }
     }
@@ -171,31 +193,39 @@ pub fn view(state: &State) -> Element<'_, Message> {
         .into(),
     );
 
-    let location_section = section(
-        "\u{25ce} Default Location",
-        column![
-            labeled_row(
-                "City:",
-                text_input("Enter city name", &state.city_input)
-                    .on_input(Message::CityChanged)
-                    .into()
-            ),
-            labeled_row(
-                "State/Province:",
-                text_input("Enter state or province", &state.state_input)
-                    .on_input(Message::StateChanged)
-                    .into()
-            ),
-            labeled_row(
-                "Country:",
-                text_input("Enter country code (e.g., US, CA)", &state.country_input)
-                    .on_input(Message::CountryChanged)
-                    .into()
-            ),
-        ]
-        .spacing(12)
-        .into(),
-    );
+    let mut location_column = column![
+        labeled_row(
+            "City:",
+            text_input("Enter city name", &state.city_input)
+                .on_input(Message::CityChanged)
+                .into()
+        ),
+        labeled_row(
+            "State/Province:",
+            text_input("Enter state or province", &state.state_input)
+                .on_input(Message::StateChanged)
+                .into()
+        ),
+        labeled_row(
+            "Country:",
+            text_input("Enter country code (e.g., US, CA)", &state.country_input)
+                .on_input(Message::CountryChanged)
+                .into()
+        ),
+        detect_location_row(state.is_detecting_location),
+    ]
+    .spacing(12);
+
+    if let Some(error) = &state.location_detection_error {
+        location_column = location_column.push(location_hint_row(
+            text(error.clone()).size(12).style(style::danger).into(),
+        ));
+    }
+
+    // "Home" rather than "Default Location": this is a single saved place
+    // (where the app opens showing conditions for), not a location picker --
+    // multi-location support is tracked separately (issue #5).
+    let location_section = section("\u{2302} Home", location_column.into());
 
     let appearance_section = section(
         "\u{263e} Appearance",
@@ -241,7 +271,8 @@ pub fn view(state: &State) -> Element<'_, Message> {
                     .style(style::accent),
                 text(
                     "Choose a weather provider, add its API key, and set your \
-                     default location to get started."
+                     Home location (typed in, or detected from your IP address) \
+                     to get started."
                 )
                 .size(12)
                 .style(style::muted),
@@ -303,5 +334,32 @@ fn api_key_hint_row(label: &'static str, url: &'static str) -> Element<'static, 
             .style(style::link_button)
             .padding(0),
     ]
+    .into()
+}
+
+/// Indents an arbitrary element under the Home section's fields, aligning it
+/// under the input column rather than the label column (matching
+/// `labeled_row`'s 160px label width) -- used for the location-detection
+/// error line, which isn't itself a button/link like the other hint rows.
+fn location_hint_row(content: Element<'_, Message>) -> Element<'_, Message> {
+    row![space::horizontal().width(160), content].into()
+}
+
+/// The "Detect my location" button, indented to align under the Home
+/// section's input fields. A separate function (rather than inline in
+/// `view`) purely to give the surrounding `column!` macro's `Into<Element>`
+/// call an unambiguous type to infer against.
+fn detect_location_row(is_detecting: bool) -> Element<'static, Message> {
+    row![
+        space::horizontal().width(160),
+        button(text(if is_detecting {
+            "Detecting..."
+        } else {
+            "Detect my location"
+        }))
+        .on_press_maybe((!is_detecting).then_some(Message::DetectLocationRequested))
+        .style(style::secondary_button),
+    ]
+    .align_y(Alignment::Center)
     .into()
 }

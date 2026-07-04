@@ -12,6 +12,10 @@ become the body of the GitHub Release created by
   automatically alongside the main window with a welcome banner and a "Get
   an API key" link for whichever provider is selected, instead of silently
   attempting a fetch that's guaranteed to fail with no token configured.
+- The location section in Preferences is now labeled "Home" and has a
+  "Detect my location" button that prefills city/state/country from an
+  IP-based lookup — a starting point you can still edit by hand, not a
+  precise GPS location.
 
 **Providers**
 

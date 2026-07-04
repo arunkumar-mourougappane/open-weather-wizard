@@ -10,6 +10,7 @@ use log::{self, LevelFilter};
 
 mod app;
 mod config;
+mod geolocation;
 mod ui;
 mod weather_api;
 
