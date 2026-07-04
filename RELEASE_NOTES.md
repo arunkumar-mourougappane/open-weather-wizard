@@ -13,9 +13,11 @@ become the body of the GitHub Release created by
   an API key" link for whichever provider is selected, instead of silently
   attempting a fetch that's guaranteed to fail with no token configured.
 - The location section in Preferences is now labeled "Home" and has a
-  "Detect my location" button that prefills city/state/country from an
-  IP-based lookup — a starting point you can still edit by hand, not a
-  precise GPS location.
+  "Detect my location" button. It now tries your OS's native location
+  service first (macOS/Windows/Linux) for real GPS/Wi-Fi-based accuracy,
+  only falling back to an (inherently less accurate) IP-based lookup if
+  native location isn't available or permitted — either way, it's a
+  starting point you can still edit by hand.
 
 **Providers**
 

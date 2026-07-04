@@ -41,6 +41,22 @@ path = "src/main.rs"
 [dev-dependencies]
 tokio-test = "0.4.3"
 
+# OS-native location backends (src/geolocation.rs's `os_location` module) --
+# one per platform, so e.g. a Linux build never pulls in objc2/CoreLocation
+# bindings.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSObject", "NSError"] }
+objc2-core-location = { version = "0.3", features = ["CLLocationManager", "CLLocationManagerDelegate", "CLLocation"] }
+objc2-core-foundation = { version = "0.3", features = ["CFRunLoop", "CFDate"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = ["Devices_Geolocation"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+futures-util = "0.3"
+
 [package.metadata.packager]
 product-name = "Open Weather Wizard"
 identifier = "com.arunkumarmourougappane.open-weather-wizard"
@@ -57,3 +73,9 @@ depends = ["libxkbcommon0", "libwayland-client0", "libx11-6", "libxrandr2", "lib
 window-size = { width = 660, height = 400 }
 app-position = { x = 180, y = 170 }
 application-folder-position = { x = 480, y = 170 }
+
+# NSLocationWhenInUseUsageDescription is required for the packaged .app to
+# ever show a location permission prompt (see src/geolocation.rs's macos
+# submodule) -- without it, CoreLocation just denies silently.
+[package.metadata.packager.macos]
+info-plist-path = "packaging/macos/Info.plist"
