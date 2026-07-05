@@ -1,10 +1,19 @@
 # Google Weather API
 
-Research notes on Google's real Weather API, for anyone turning
-`src/weather_api/google_weather_api.rs` from its current hardcoded mock into
-a live `WeatherProvider` implementation. This is **not** part of the Google
-Maps JavaScript SDK — it's a standalone REST API under Google Maps Platform's
-"Environment" product category (alongside Air Quality, Pollen, and Solar).
+Research notes on Google's real Weather API, originally written to plan
+turning `src/weather_api/google_weather_api.rs` from a hardcoded mock into a
+live `WeatherProvider` implementation. **That implementation has since
+landed** (see `google_weather_api.rs` directly for the real code, and
+`docs/ARCHITECTURE.md`'s "First-run setup and location detection" section for
+how it's wired into the rest of the app) — this document is kept as
+reference for the API itself (endpoints, auth, pricing, response shapes),
+not as a to-do list. Sections describing gaps in "the current mock" below
+are historical context for *why* certain design decisions were made, not a
+description of the shipped code.
+
+This is **not** part of the Google Maps JavaScript SDK — it's a standalone
+REST API under Google Maps Platform's "Environment" product category
+(alongside Air Quality, Pollen, and Solar).
 
 Official docs: https://developers.google.com/maps/documentation/weather
 

@@ -49,9 +49,10 @@ Content depends on `WeatherStatus`:
 
 A horizontally-scrollable row of day cards, appended below the current
 conditions. **Omitted from the layout entirely** — not shown as an empty
-placeholder — whenever `ForecastStatus` is `Loading`, `Error`, or
-`Loaded` with an empty `days` list (i.e. the Google Weather mock provider,
-which has no real forecast integration).
+placeholder — whenever `ForecastStatus` is `Loading`, `Error`, or `Loaded`
+with an empty `days` list. Both current providers (OpenWeatherMap, Google
+Weather) return real forecasts today; this path exists for a future
+provider that might not (see `src/ui/forecast_row.rs`'s own doc comment).
 
 ```
 scrollable [horizontal, width Fill]

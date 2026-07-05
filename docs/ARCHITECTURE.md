@@ -153,6 +153,55 @@ Lottie composition (`assets/lottie/{sun,clouds,rain,snow}.json` — see
 `iced::widget::svg`. `src/ui/icons.rs::view()` dispatches between the two per
 symbol.
 
+## First-run setup and location detection
+
+`ConfigManager::config_exists()` (checked in `app::boot()` *before*
+`load_config()`) is the only signal distinguishing a fresh install from a
+returning user — a missing or unparsable config file both silently fall back
+to `AppConfig::default()`, so `load_config()` alone can't tell them apart.
+When no config file exists yet, `boot()` opens the Preferences window
+automatically alongside the main window, instead of firing a weather fetch
+that's guaranteed to fail against an unset API token (every provider
+requires one now — see `WeatherProviderFactory::create_provider`).
+`AppState::is_first_run` swaps in the "Welcome to Weather Wizard" window
+title and Preferences' welcome banner (`src/ui/preferences.rs`), clearing
+back to ordinary "Preferences" copy the moment Save/Cancel/window-close
+resolves it — a later manual reopen via the toolbar never shows first-run
+copy again.
+
+`src/geolocation.rs`'s `detect_location()` (wired to Preferences' "Detect my
+location" button) is a two-tier best-effort lookup:
+
+1. **OS-native positioning** — CoreLocation (macOS, via the low-level
+   `objc2-core-location` bindings; no ergonomic wrapper crate exists), the
+   WinRT `Geolocator` (Windows, via the `windows` crate), GeoClue2 (Linux,
+   over D-Bus via `zbus`) — each gated behind a target-specific Cargo
+   dependency (`[target.'cfg(target_os = "...")'.dependencies]`) so no
+   platform pulls in another's bindings. Coordinates from any of these get
+   reverse-geocoded into city/state/country via OpenStreetMap's free
+   Nominatim API — deliberately country-independent (no US-specific
+   state-abbreviation normalization, unlike Google Weather's own geocoding
+   disambiguation in `google_weather_api.rs`), since this runs for any
+   location on Earth.
+2. **IP-based geolocation** (`ipwho.is`), used only when native location is
+   unavailable, denied, or fails. Confirmed by an actual real-world test that
+   IP geolocation alone is meaningfully inaccurate — several free providers
+   all missed a real connection's city by tens of miles, an inherent
+   limitation of resolving to wherever the ISP's routing infrastructure is
+   registered rather than the physical location — so it's a last-resort
+   fallback, never the primary path.
+
+Every failure mode (unsupported platform, denied permission, no result, a
+network error) degrades to the next tier rather than surfacing as an error:
+detection is a convenience prefill the user can always override by typing,
+never something that blocks Save or first-run setup. See
+`src/geolocation.rs`'s own module doc for the full per-platform design
+rationale, and `packaging/macos/Info.plist` /
+`Cargo.toml`'s `package.metadata.packager.macos` for why the *packaged*
+macOS release needs an `NSLocationWhenInUseUsageDescription` key to ever
+show the location permission prompt (a plain `cargo run` dev binary never
+will, regardless).
+
 ## CI / build
 
 - `Cargo.toml`: `gtk4`/`glib`/`gio`/`gdk-pixbuf` replaced with `iced` (features
