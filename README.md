@@ -6,9 +6,7 @@
 
 A simple, elegant desktop weather app built in Rust with [iced](https://github.com/iced-rs/iced). Current conditions, a 5-day forecast you can tap into for detail, and every weather condition rendered as its own hand-authored, GPU-composited [Lottie](https://lottiefiles.com/) animation.
 
-<p align="center">
-  <img src="docs/screenshots/main-view.png" alt="Open Weather Wizard main window showing current conditions and the 5-day forecast carousel" width="600">
-</p>
+![Open Weather Wizard main window showing current conditions and the 5-day forecast carousel](docs/screenshots/main-view.png)
 
 ## Features
 
@@ -93,9 +91,7 @@ macOS and Windows builds have no extra system dependencies beyond a working Rust
 
 On first run (no config file yet), Preferences opens automatically alongside the main window with a short welcome banner, since there's nothing to fetch weather for until a provider, API key, and Home location are set:
 
-<p align="center">
-  <img src="docs/screenshots/first-run-setup.png" alt="Preferences window on first run, showing the welcome banner, provider/API key fields, and Home location section with a Detect my location button" width="520">
-</p>
+![Preferences window on first run, showing the welcome banner, provider/API key fields, and Home location section with a Detect my location button](docs/screenshots/first-run-setup.png)
 
 Everything shown there can be changed again at any time from the toolbar's **Preferences** button (weather provider, API token, Home location, dark mode, units) — changes are previewed live before you save.
 
