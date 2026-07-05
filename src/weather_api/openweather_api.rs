@@ -172,8 +172,15 @@ async fn get_coords(
         .await
         .map_err(GeocodeError::RequestFailed)?;
     log::debug!("Geocoding response: {:?}", locations);
-    // The API returns an empty array `[]` if the location isn't found.
-    // We take the first element if it exists, otherwise return a `LocationNotFound` error.
+    select_location(locations)
+}
+
+/// The API returns an empty array `[]` if the location isn't found, and an
+/// array of matches (most relevant first, though `get_coords` already
+/// requests `limit=1`) otherwise -- take the first element if present, or
+/// `LocationNotFound` for an empty response. Split out from `get_coords` so
+/// this selection logic is testable without a live network call.
+fn select_location(locations: Vec<Location>) -> Result<Location, GeocodeError> {
     locations
         .into_iter()
         .next()
@@ -227,8 +234,8 @@ pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiRespon
     // Check if the request was successful (e.g., status 200 OK)
     if response.status().is_success() {
         // Try to parse the JSON response into our ApiResponse struct
-        response.json::<ApiResponse>().await.map_err(|_| {
-            log::error!("Failed to parse API response");
+        response.json::<ApiResponse>().await.map_err(|e| {
+            log::error!("Failed to parse API response: {e}");
             ApiError::InvalidResponse
         })
     } else {
@@ -261,8 +268,8 @@ pub async fn get_forecast(
         let raw = response
             .json::<crate::weather_api::forecast::RawForecastResponse>()
             .await
-            .map_err(|_| {
-                log::error!("Failed to parse forecast API response");
+            .map_err(|e| {
+                log::error!("Failed to parse forecast API response: {e}");
                 ApiError::InvalidResponse
             })?;
         Ok(crate::weather_api::forecast::aggregate_daily(raw))
@@ -334,14 +341,108 @@ impl WeatherProvider for OpenWeatherProvider {
         let api_location = location_config_to_location(location);
         get_forecast(&api_location, &self.api_key).await
     }
+}
 
-    /// Returns the display name of the provider.
-    fn name(&self) -> &'static str {
-        "OpenWeather"
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_weather_symbol_known_conditions() {
+        assert_eq!(get_weather_symbol("Clear"), WeatherSymbol::Clear);
+        assert_eq!(get_weather_symbol("Rain"), WeatherSymbol::Rain);
+        assert_eq!(
+            get_weather_symbol("Thunderstorm"),
+            WeatherSymbol::Thunderstorm
+        );
+        assert_eq!(get_weather_symbol("Tornado"), WeatherSymbol::Tornado);
     }
 
-    /// Returns `true` as this provider requires an API key.
-    fn requires_api_key(&self) -> bool {
-        true
+    #[test]
+    fn test_get_weather_symbol_unknown_falls_back_to_default() {
+        assert_eq!(
+            get_weather_symbol("SomethingUnknown"),
+            WeatherSymbol::Default
+        );
+        assert_eq!(get_weather_symbol(""), WeatherSymbol::Default);
+    }
+
+    #[test]
+    fn test_select_location_empty_is_not_found() {
+        let result = select_location(vec![]);
+        assert!(matches!(result, Err(GeocodeError::LocationNotFound)));
+    }
+
+    #[test]
+    fn test_select_location_picks_first_result() {
+        let locations = vec![
+            Location {
+                name: "Peoria".to_string(),
+                lat: 40.6936,
+                lon: -89.589,
+                country: Some("US".to_string()),
+                state: Some("IL".to_string()),
+            },
+            Location {
+                name: "Peoria".to_string(),
+                lat: 33.5806,
+                lon: -112.2374,
+                country: Some("US".to_string()),
+                state: Some("AZ".to_string()),
+            },
+        ];
+        let selected = select_location(locations).unwrap();
+        assert_eq!(selected.state.as_deref(), Some("IL"));
+    }
+
+    #[test]
+    fn test_location_deserializes_from_geocode_fixture() {
+        // Matches the shape of OpenWeatherMap's geo/1.0/direct response.
+        let json = r#"[{
+            "name": "Peoria",
+            "lat": 40.6936,
+            "lon": -89.589,
+            "country": "US",
+            "state": "Illinois"
+        }]"#;
+        let locations: Vec<Location> = serde_json::from_str(json).unwrap();
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].name, "Peoria");
+        assert_eq!(locations[0].state.as_deref(), Some("Illinois"));
+    }
+
+    #[test]
+    fn test_location_deserializes_empty_geocode_fixture() {
+        // OpenWeatherMap returns an empty array (not an error) when nothing matches.
+        let locations: Vec<Location> = serde_json::from_str("[]").unwrap();
+        assert!(locations.is_empty());
+    }
+
+    #[test]
+    fn test_api_response_deserializes_from_fixture() {
+        // Matches the shape of OpenWeatherMap's data/2.5/weather response.
+        let json = r#"{
+            "weather": [{"main": "Clear", "description": "clear sky"}],
+            "main": {
+                "temp": 22.5,
+                "feels_like": 22.0,
+                "temp_min": 19.0,
+                "temp_max": 25.0,
+                "pressure": 1015,
+                "humidity": 65
+            },
+            "wind": {"speed": 3.6, "deg": 210},
+            "visibility": 10000,
+            "sys": {"sunrise": 1700000000, "sunset": 1700040000},
+            "timezone": -18000,
+            "name": "Peoria"
+        }"#;
+        let response: ApiResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.name, "Peoria");
+        assert_eq!(response.weather[0].main, "Clear");
+        assert_eq!(response.main.temp, 22.5);
+        assert_eq!(response.wind.deg, 210);
+        assert_eq!(response.sys.sunrise, 1_700_000_000);
+        assert_eq!(response.timezone, -18000);
     }
 }

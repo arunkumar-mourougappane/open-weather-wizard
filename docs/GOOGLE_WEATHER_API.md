@@ -13,10 +13,10 @@ Official docs: https://developers.google.com/maps/documentation/weather
 - Requires a Google Cloud project with billing enabled and the Weather API
   enabled on it, same as any other Maps Platform API.
 - Auth is a plain API key passed as the `key` query parameter — no OAuth,
-  no request signing. This matches the existing `WeatherProvider` shape
-  (`requires_api_key() -> bool`), so a real implementation would fit the same
-  `keyring`-backed token storage `src/config.rs` already uses for
-  OpenWeatherMap.
+  no request signing. This matches how `WeatherProviderFactory::create_provider`
+  already requires a token for every `WeatherApiProvider` variant, so a real
+  implementation fits the same `keyring`-backed token storage `src/config.rs`
+  already uses for OpenWeatherMap.
 - A no-cost "Maps Demo Key" exists for trying the API without attaching
   billing, but it's rate-limited/watermarked and not meant for production use.
 - Every real request needs a lat/lon pair (`location.latitude` /

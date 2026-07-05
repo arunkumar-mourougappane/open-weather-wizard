@@ -94,7 +94,8 @@ impl State {
         if self.country_input.trim().is_empty() {
             errors.push("Country is required.".to_string());
         }
-        // Both providers require a token (see WeatherProvider::requires_api_key).
+        // Both providers require a token -- WeatherProviderFactory::create_provider
+        // errors out without one for either WeatherApiProvider variant.
         if self.token_input.trim().is_empty() {
             errors.push(format!("API Token is required for {}.", self.provider));
         }

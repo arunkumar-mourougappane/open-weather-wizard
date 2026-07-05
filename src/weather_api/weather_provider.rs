@@ -40,14 +40,6 @@ pub trait WeatherProvider {
     /// # Errors
     /// Returns an `ApiError` if the data cannot be fetched.
     async fn get_forecast(&self, location: &LocationConfig) -> Result<ForecastResponse, ApiError>;
-
-    /// Returns the display name of the weather provider (e.g., "OpenWeather").
-    #[allow(dead_code)]
-    fn name(&self) -> &'static str;
-
-    /// Returns `true` if the provider requires an API key to function.
-    #[allow(dead_code)]
-    fn requires_api_key(&self) -> bool;
 }
 
 /// A factory for creating weather providers.
