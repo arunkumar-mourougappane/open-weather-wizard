@@ -4,11 +4,14 @@
 //!
 //! All application logic, including UI construction, state management, and API
 //! calls, is handled within the `open_weather_wizard` library crate, organized into
-//! the `config`, `app`, `ui`, and `weather_api` modules.
+//! the `config`, `app`, `ui`, and `weather_api` modules. `cli` (this bin only,
+//! not part of the library) adds a `--headless` mode -- see its own doc comment.
+use clap::Parser;
 use env_logger::{self, Builder};
 use log::{self, LevelFilter};
 
 mod app;
+mod cli;
 mod config;
 mod geolocation;
 mod ui;
@@ -18,8 +21,12 @@ mod weather_api;
 ///
 /// iced manages its own tokio runtime internally (via its `tokio` executor feature),
 /// so this must stay a plain, synchronous `fn main` rather than `#[tokio::main]` --
-/// nesting a second runtime around `app::run()` would conflict with it.
+/// nesting a second runtime around `app::run()` would conflict with it. `cli::run`
+/// (the `--headless` path) never touches `app::run()`, so it's free to spin up its
+/// own runtime instead.
 fn main() -> iced::Result {
+    let cli = cli::Cli::parse();
+
     Builder::new()
         .filter_level(LevelFilter::Info)
         // iced's internals log full window/compositor structs at Info level
@@ -28,6 +35,10 @@ fn main() -> iced::Result {
         .filter_module("iced_winit", LevelFilter::Warn)
         .filter_module("iced_wgpu", LevelFilter::Warn)
         .init();
+
+    if cli.headless {
+        cli::run(&cli);
+    }
 
     log::info!("Starting Weather Wizard application");
     app::run()
