@@ -126,8 +126,10 @@ const US_STATE_ABBREVIATIONS: &[(&str, &str)] = &[
 /// `name`-only search can't tell "Peoria, IL" from "Peoria, AZ" apart, and
 /// picking the wrong one silently returns a real, plausible-looking, but
 /// entirely wrong forecast.
-async fn geocode(location: &LocationConfig) -> Result<(f64, f64), ApiError> {
-    let client = reqwest::Client::new();
+async fn geocode(
+    client: &reqwest::Client,
+    location: &LocationConfig,
+) -> Result<(f64, f64), ApiError> {
     let mut query = vec![
         ("name", location.city.clone()),
         ("count", "10".to_string()),
@@ -373,11 +375,11 @@ fn resolve_epoch_and_offset(rfc3339: &str, iana_zone_id: &str) -> (i64, i64) {
 }
 
 async fn fetch_current_conditions(
+    client: &reqwest::Client,
     api_key: &str,
     lat: f64,
     lon: f64,
 ) -> Result<CurrentConditionsResponse, ApiError> {
-    let client = reqwest::Client::new();
     let response = client
         .get(format!("{WEATHER_API_BASE}/currentConditions:lookup"))
         .query(&[
@@ -408,12 +410,12 @@ async fn fetch_current_conditions(
 }
 
 async fn fetch_forecast_days(
+    client: &reqwest::Client,
     api_key: &str,
     lat: f64,
     lon: f64,
     days: u8,
 ) -> Result<ForecastDaysResponse, ApiError> {
-    let client = reqwest::Client::new();
     let response = client
         .get(format!("{WEATHER_API_BASE}/forecast/days:lookup"))
         .query(&[
@@ -469,25 +471,34 @@ fn map_forecast_day(item: &ForecastDayItem) -> ForecastDay {
 /// Platform's Weather API.
 pub struct GoogleWeatherProvider {
     api_key: String,
+    /// Reused across every request this provider makes (geocoding, current
+    /// conditions, forecast) rather than building a fresh `reqwest::Client`
+    /// per call -- a `Client` holds a connection pool internally, so
+    /// constructing a new one per request throws away keep-alive/TLS-session
+    /// reuse for no benefit.
+    client: reqwest::Client,
 }
 
 impl GoogleWeatherProvider {
     /// Creates a new `GoogleWeatherProvider` with the given Google Cloud API
     /// key (must have the Weather API enabled on its project).
     pub fn new(api_key: String) -> Self {
-        Self { api_key }
+        Self {
+            api_key,
+            client: reqwest::Client::new(),
+        }
     }
 }
 
 #[async_trait]
 impl WeatherProvider for GoogleWeatherProvider {
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError> {
-        let (lat, lon) = geocode(location).await?;
+        let (lat, lon) = geocode(&self.client, location).await?;
 
-        let current = fetch_current_conditions(&self.api_key, lat, lon).await?;
+        let current = fetch_current_conditions(&self.client, &self.api_key, lat, lon).await?;
         // Sunrise/sunset and today's min/max only come from the daily
         // forecast, not currentConditions -- see the module doc.
-        let forecast = fetch_forecast_days(&self.api_key, lat, lon, 1).await?;
+        let forecast = fetch_forecast_days(&self.client, &self.api_key, lat, lon, 1).await?;
         let today = forecast
             .forecast_days
             .first()
@@ -524,8 +535,9 @@ impl WeatherProvider for GoogleWeatherProvider {
     }
 
     async fn get_forecast(&self, location: &LocationConfig) -> Result<ForecastResponse, ApiError> {
-        let (lat, lon) = geocode(location).await?;
-        let forecast = fetch_forecast_days(&self.api_key, lat, lon, FORECAST_DAYS).await?;
+        let (lat, lon) = geocode(&self.client, location).await?;
+        let forecast =
+            fetch_forecast_days(&self.client, &self.api_key, lat, lon, FORECAST_DAYS).await?;
 
         Ok(ForecastResponse {
             location_name: location.city.clone(),
@@ -535,14 +547,6 @@ impl WeatherProvider for GoogleWeatherProvider {
                 .map(map_forecast_day)
                 .collect(),
         })
-    }
-
-    fn name(&self) -> &'static str {
-        "Google Weather"
-    }
-
-    fn requires_api_key(&self) -> bool {
-        true
     }
 }
 
