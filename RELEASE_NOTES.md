@@ -6,6 +6,16 @@ become the body of the GitHub Release created by
 
 ## Unreleased
 
+**CLI**
+
+- New `--headless` mode: fetches weather (and forecast) once and prints it to
+  stdout without opening the GUI — useful for scripting, status-bar widgets,
+  or a display-less machine. `--json` for machine-readable output;
+  `--city`/`--state`/`--country`/`--provider` for a one-off query without
+  touching the saved config. Still needs an API token, either the one saved
+  via the GUI's Preferences (OS keychain) or, for a machine with no keychain
+  available, the `OPEN_WEATHER_WIZARD_API_TOKEN` environment variable.
+
 **Interface**
 
 - First-run setup: if no config file exists yet, Preferences now opens

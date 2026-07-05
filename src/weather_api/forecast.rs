@@ -8,7 +8,7 @@
 //! so this aggregates the 3-hourly entries into daily min/max/dominant-condition
 //! buckets instead.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::weather_api::openweather_api::{Main, Weather, WeatherSymbol, Wind, get_weather_symbol};
 
@@ -44,7 +44,7 @@ pub struct RawForecastResponse {
 }
 
 /// An app-level daily forecast summary, aggregated from several 3-hourly entries.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ForecastDay {
     /// UTC calendar date, e.g. "2026-07-02". Kept as a `String` bucket key rather
     /// than adding a date-handling crate; this is a display label, not something
@@ -81,7 +81,7 @@ pub struct ForecastDay {
 }
 
 /// An app-level forecast, ready for the UI to render.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ForecastResponse {
     pub location_name: String,
     pub days: Vec<ForecastDay>,

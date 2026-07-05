@@ -20,12 +20,12 @@ use crate::config::LocationConfig;
 use crate::weather_api::weather_provider::{WeatherProvider, location_config_to_location};
 use async_trait::async_trait;
 use reqwest;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Represents weather conditions returned by the OpenWeatherMap API.
 ///
 /// This struct contains the main weather type (e.g., "Clouds", "Rain") and a more detailed description
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Weather {
     pub main: String,
     pub description: String,
@@ -34,7 +34,7 @@ pub struct Weather {
 /// Contains the main meteorological data like temperature and humidity.
 ///
 /// This struct is part of the `ApiResponse` and holds the primary weather metrics
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Main {
     pub temp: f64,
     pub feels_like: f64,
@@ -46,14 +46,14 @@ pub struct Main {
 
 /// Wind speed (meters/sec, since requests use `units=metric`) and direction
 /// (meteorological degrees, 0 = due north).
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Wind {
     pub speed: f64,
     pub deg: i64,
 }
 
 /// Sunrise/sunset as Unix (UTC) timestamps.
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Sys {
     pub sunrise: i64,
     pub sunset: i64,
@@ -63,7 +63,11 @@ pub struct Sys {
 ///
 /// This struct aggregates the most relevant weather information, including a list of weather
 /// conditions, the main meteorological data like temperature and humidity, and the name of the city.
-#[derive(Deserialize, Debug, Clone)]
+///
+/// Derives `Serialize` (in addition to `Deserialize`) so the headless CLI mode
+/// (`src/cli.rs`, bin-only) can emit this directly as `--json` output --
+/// nothing about parsing provider responses needs it, only that output path.
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ApiResponse {
     pub weather: Vec<Weather>,
     pub main: Main,
@@ -92,7 +96,7 @@ pub enum ApiError {
 }
 
 /// Represents a symbolic representation of a weather condition.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum WeatherSymbol {
     Clear,
     Clouds,
