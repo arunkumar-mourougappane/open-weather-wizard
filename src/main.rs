@@ -27,13 +27,25 @@ mod weather_api;
 fn main() -> iced::Result {
     let cli = cli::Cli::parse();
 
+    // Info-level logging (config loads, fetch lifecycle, etc.) is useful
+    // during development but just noise -- and clutters --headless's stdout
+    // output -- in a release build; `cargo build --release` disables it in
+    // favor of Warn/Error only. `RUST_LOG` still overrides this if a user
+    // explicitly wants Info (or more) out of a release binary.
+    let default_level = if cfg!(debug_assertions) {
+        LevelFilter::Info
+    } else {
+        LevelFilter::Warn
+    };
+
     Builder::new()
-        .filter_level(LevelFilter::Info)
+        .filter_level(default_level)
         // iced's internals log full window/compositor structs at Info level
         // on every launch (window attributes, GPU adapter info, etc.) --
         // useful when debugging iced itself, just noise otherwise.
         .filter_module("iced_winit", LevelFilter::Warn)
         .filter_module("iced_wgpu", LevelFilter::Warn)
+        .parse_default_env()
         .init();
 
     if cli.headless {
