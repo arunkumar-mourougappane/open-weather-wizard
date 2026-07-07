@@ -198,6 +198,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
                 Some(state.provider.clone()),
                 Message::ProviderSelected
             )
+            .style(style::pick_list)
             .into()
         ),
         labeled_row(
@@ -205,6 +206,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
             text_input("Enter your API token", &state.token_input)
                 .secure(true)
                 .on_input(Message::TokenChanged)
+                .style(style::text_input)
                 .into()
         ),
         api_key_hint_row(hint_label, hint_url),
@@ -228,18 +230,21 @@ pub fn view(state: &State) -> Element<'_, Message> {
             "City:",
             text_input("Enter city name", &state.city_input)
                 .on_input(Message::CityChanged)
+                .style(style::text_input)
                 .into()
         ),
         labeled_row(
             "State/Province:",
             text_input("Enter state or province", &state.state_input)
                 .on_input(Message::StateChanged)
+                .style(style::text_input)
                 .into()
         ),
         labeled_row(
             "Country:",
             text_input("Enter country code (e.g., US, CA)", &state.country_input)
                 .on_input(Message::CountryChanged)
+                .style(style::text_input)
                 .into()
         ),
         detect_location_row(state.is_detecting_location),

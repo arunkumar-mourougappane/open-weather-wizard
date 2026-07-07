@@ -9,6 +9,11 @@
 use iced::widget::{button, container, text};
 use iced::{Background, Border, Color, Shadow, Theme, Vector};
 
+/// The corner radius shared by every form field (`text_input`/`pick_list`)
+/// and button, so inputs and actions read as one consistent, rounded style
+/// instead of iced's default 2px -- almost-square -- corners.
+const FIELD_RADIUS: f32 = 8.0;
+
 /// Sky-blue accent, used for primary actions and the temperature/location
 /// text -- the two things a glance at the app should land on first. Kept as
 /// a single fixed brand color rather than theme-derived, since it reads
@@ -255,6 +260,40 @@ pub fn success(_theme: &Theme) -> text::Style {
 pub fn accent(_theme: &Theme) -> text::Style {
     text::Style {
         color: Some(ACCENT),
+    }
+}
+
+/// Rounded corners for every `text_input` (API Token, City, State/Province,
+/// Country) -- otherwise identical to iced's own `text_input::default`.
+/// Uses fully-qualified paths rather than importing `iced::widget::text_input`
+/// since that name is reused for this function itself.
+pub fn text_input(
+    theme: &Theme,
+    status: iced::widget::text_input::Status,
+) -> iced::widget::text_input::Style {
+    let default = iced::widget::text_input::default(theme, status);
+    iced::widget::text_input::Style {
+        border: Border {
+            radius: FIELD_RADIUS.into(),
+            ..default.border
+        },
+        ..default
+    }
+}
+
+/// Rounded corners for the Provider `pick_list`, matching `text_input`'s so
+/// every field in the form reads as the same rounded style.
+pub fn pick_list(
+    theme: &Theme,
+    status: iced::widget::pick_list::Status,
+) -> iced::widget::pick_list::Style {
+    let default = iced::widget::pick_list::default(theme, status);
+    iced::widget::pick_list::Style {
+        border: Border {
+            radius: FIELD_RADIUS.into(),
+            ..default.border
+        },
+        ..default
     }
 }
 
