@@ -35,7 +35,11 @@ pub const DEFAULT_WINDOW_HEIGHT: f32 = 620.0;
 const MAIN_WINDOW_MIN_SIZE: Size = Size::new(480.0, 420.0);
 /// The preferences form's fixed 160px label column plus a usable input
 /// width needs at least this much room before fields start getting crushed.
-const PREFERENCES_WINDOW_MIN_SIZE: Size = Size::new(440.0, 400.0);
+/// The height covers all three sections (Weather Provider -- including the
+/// Verify API button/status row -- Home, and Appearance) plus the
+/// Save/Cancel row at once, so the common case (no validation errors, no
+/// first-run banner) never needs `view()`'s `scrollable` wrapper to kick in.
+const PREFERENCES_WINDOW_MIN_SIZE: Size = Size::new(460.0, 640.0);
 const AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
 /// A full refresh against the real Google Weather API costs 3 billable
 /// calls (`currentConditions:lookup` + two `forecast/days:lookup` calls --
@@ -156,6 +160,13 @@ pub enum Message {
     /// Applies to whatever Preferences window is currently open, if any --
     /// see `update`.
     LocationDetected(Result<LocationConfig, String>),
+    /// Result of a single `get_weather()` call against the *currently-typed*
+    /// provider/token/location, fired by
+    /// `Message::Preferences(preferences::Message::TestConnectionRequested)`.
+    /// Applies to whatever Preferences window is currently open, if any --
+    /// see `update`. Purely informational -- never touches `state.weather`
+    /// or `state.config`.
+    ConnectionTested(Result<(), String>),
 
     Preferences(preferences::Message),
 }
@@ -267,7 +278,7 @@ fn note_forecast_transitions(
 /// paths can never drift apart.
 fn preferences_window_settings() -> window::Settings {
     window::Settings {
-        size: Size::new(520.0, 560.0),
+        size: Size::new(540.0, 700.0),
         min_size: Some(PREFERENCES_WINDOW_MIN_SIZE),
         icon: crate::ui::icons::load_window_icon("icon/icon.png"),
         ..window::Settings::default()
@@ -536,6 +547,47 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     );
                 }
             }
+            Task::none()
+        }
+        Message::Preferences(preferences::Message::TestConnectionRequested) => {
+            let Some(prefs_state) = state.prefs_state.as_mut() else {
+                return Task::none();
+            };
+            prefs_state.is_testing_connection = true;
+            prefs_state.connection_test_result = None;
+
+            let provider_type = prefs_state.provider.clone();
+            let token =
+                (!prefs_state.token_input.is_empty()).then(|| prefs_state.token_input.clone());
+            let location = LocationConfig {
+                city: prefs_state.city_input.clone(),
+                state: prefs_state.state_input.clone(),
+                country: prefs_state.country_input.clone(),
+            };
+
+            Task::perform(
+                async move {
+                    let provider = WeatherProviderFactory::create_provider(&provider_type, token)?;
+                    provider
+                        .get_weather(&location)
+                        .await
+                        .map(|_| ())
+                        .map_err(|e| format!("{:?}", e))
+                },
+                Message::ConnectionTested,
+            )
+        }
+        Message::ConnectionTested(result) => {
+            // Same reasoning as `LocationDetected`: Preferences may already
+            // be closed by the time this async call resolves.
+            let Some(prefs_state) = state.prefs_state.as_mut() else {
+                return Task::none();
+            };
+            prefs_state.is_testing_connection = false;
+            if let Err(e) = &result {
+                log::warn!("Connection test failed: {e}");
+            }
+            prefs_state.connection_test_result = Some(result);
             Task::none()
         }
         Message::Preferences(sub_message) => {

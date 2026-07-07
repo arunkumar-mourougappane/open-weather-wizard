@@ -168,6 +168,36 @@ pub fn secondary_button(theme: &Theme, status: button::Status) -> button::Style 
     }
 }
 
+/// An accent-outlined button for secondary actions that still need to stand
+/// out against a `day_card` background -- unlike `secondary_button`'s
+/// neutral, theme-derived border (which reads as barely-there against the
+/// card's own near-identical gray in both light and dark mode), this uses
+/// the fixed `ACCENT` color for both border and text, matching the section
+/// headers so it stays legible regardless of theme.
+pub fn accent_button(theme: &Theme, status: button::Status) -> button::Style {
+    let palette = theme.extended_palette();
+
+    let (border_color, text_color) = match status {
+        button::Status::Hovered | button::Status::Pressed => (ACCENT_STRONG, ACCENT_STRONG),
+        button::Status::Active => (ACCENT, ACCENT),
+        button::Status::Disabled => (
+            palette.background.weak.color,
+            palette.background.strong.color,
+        ),
+    };
+
+    button::Style {
+        background: None,
+        text_color,
+        border: Border {
+            color: border_color,
+            width: 1.5,
+            radius: 8.0.into(),
+        },
+        ..button::Style::default()
+    }
+}
+
 /// A borderless, backgroundless button for inline "links" (e.g. the
 /// homepage URL in the About window) -- just accent-colored text that
 /// darkens slightly on hover, no button chrome.
@@ -209,6 +239,16 @@ pub fn default_text(_theme: &Theme) -> text::Style {
 pub fn danger(theme: &Theme) -> text::Style {
     text::Style {
         color: Some(theme.extended_palette().danger.base.color),
+    }
+}
+
+/// Success text (e.g. a passed connection test) -- iced's `Theme` has no
+/// built-in success palette to derive from (unlike `danger`), so this reuses
+/// `STAT_WIND`'s green as a fixed color that reads as "success" without
+/// clashing with the stat chips it's borrowed from.
+pub fn success(_theme: &Theme) -> text::Style {
+    text::Style {
+        color: Some(STAT_WIND),
     }
 }
 

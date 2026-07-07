@@ -10,6 +10,14 @@ accumulating here.
 
 ## Unreleased
 
+**Interface**
+
+- Preferences now has a "Verify API" button next to the API Token field:
+  fires a single live request against the currently-typed
+  provider/token/location (not the saved config) and shows an inline
+  "✔ Connected" / "✗ <error>" result, so a bad token surfaces right next to
+  the field instead of only after Save closes the window. (#43)
+
 **Bug fixes**
 
 - Pressure now respects the °F/°C unit toggle like every other stat: hPa in
