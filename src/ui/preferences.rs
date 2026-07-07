@@ -60,10 +60,21 @@ pub struct State {
 }
 
 impl State {
+    /// Builds the form's initial state from the persisted config -- except
+    /// `token_input`, deliberately left empty here rather than reading it
+    /// synchronously via `AppConfig::get_api_token`. That's a blocking OS
+    /// keychain call that can pop a permission prompt (macOS re-prompts per
+    /// build, or every time if the user picked "Allow" over "Always
+    /// Allow"); calling it here would run it on `app::update`'s own thread
+    /// and freeze the whole UI -- including the window that's about to
+    /// open -- until any hidden/background prompt is dismissed. The caller
+    /// (`app::update`'s `OpenPreferences` handler and `boot`) instead fires
+    /// an async `Task` to read it off-thread and fills it in once resolved
+    /// via `Message::ApiTokenLoaded`.
     pub fn from_config(config: &AppConfig) -> Self {
         Self {
             provider: config.weather_provider.clone(),
-            token_input: config.get_api_token().unwrap_or_default(),
+            token_input: String::new(),
             city_input: config.location.city.clone(),
             state_input: config.location.state.clone(),
             country_input: config.location.country.clone(),

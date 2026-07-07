@@ -167,18 +167,34 @@ pub enum Message {
     /// see `update`. Purely informational -- never touches `state.weather`
     /// or `state.config`.
     ConnectionTested(Result<(), String>),
+    /// Result of the async, off-UI-thread `AppConfig::get_api_token` read
+    /// fired whenever a Preferences window opens (`OpenPreferences`, and
+    /// `boot`'s first-run path) -- see `preferences::State::from_config`'s
+    /// docs for why the read isn't done synchronously up front. Applies to
+    /// whatever Preferences window is currently open, if any; a no-op if
+    /// it's already been closed by the time this resolves.
+    ApiTokenLoaded(String),
 
     Preferences(preferences::Message),
 }
 
 /// Builds a `Task` that fetches current weather for the active provider/location.
+///
+/// `AppConfig::get_api_token` is a blocking OS keychain read (and, on macOS,
+/// can pop a permission prompt the *first* time a given build accesses it,
+/// or every time if the user picked "Allow" over "Always Allow") -- calling
+/// it before entering the `async move` block would run it synchronously on
+/// `update()`'s own thread, freezing the whole UI (including button clicks)
+/// until that prompt is dismissed. Reading it inside the async block instead
+/// keeps it on iced's executor, off the UI thread.
 fn fetch_weather_task(config: &AppConfig) -> Task<Message> {
     let provider_type = config.weather_provider.clone();
     let location = config.location.clone();
-    let token = config.get_api_token().ok();
+    let config = config.clone();
 
     Task::perform(
         async move {
+            let token = config.get_api_token().ok();
             let provider = WeatherProviderFactory::create_provider(&provider_type, token)?;
             provider
                 .get_weather(&location)
@@ -190,13 +206,16 @@ fn fetch_weather_task(config: &AppConfig) -> Task<Message> {
 }
 
 /// Builds a `Task` that fetches a forecast for the active provider/location.
+/// See `fetch_weather_task`'s docs for why the token is read inside the
+/// async block rather than before it.
 fn fetch_forecast_task(config: &AppConfig) -> Task<Message> {
     let provider_type = config.weather_provider.clone();
     let location = config.location.clone();
-    let token = config.get_api_token().ok();
+    let config = config.clone();
 
     Task::perform(
         async move {
+            let token = config.get_api_token().ok();
             let provider = WeatherProviderFactory::create_provider(&provider_type, token)?;
             provider
                 .get_forecast(&location)
@@ -204,6 +223,18 @@ fn fetch_forecast_task(config: &AppConfig) -> Task<Message> {
                 .map_err(|e| format!("{:?}", e))
         },
         Message::ForecastFetched,
+    )
+}
+
+/// Builds a `Task` that reads the API token off the UI thread and reports
+/// it back via `Message::ApiTokenLoaded` -- see
+/// `preferences::State::from_config`'s docs for why Preferences opens with
+/// an empty token field rather than reading it synchronously up front.
+fn fetch_api_token_task(config: &AppConfig) -> Task<Message> {
+    let config = config.clone();
+    Task::perform(
+        async move { config.get_api_token().unwrap_or_default() },
+        Message::ApiTokenLoaded,
     )
 }
 
@@ -308,7 +339,11 @@ pub fn boot() -> (AppState, Task<Message>) {
         let mut prefs_state = preferences::State::from_config(&config);
         prefs_state.is_first_run = true;
         let (id, prefs_open_task) = window::open(preferences_window_settings());
-        (Some(id), Some(prefs_state), prefs_open_task.discard())
+        (
+            Some(id),
+            Some(prefs_state),
+            Task::batch([prefs_open_task.discard(), fetch_api_token_task(&config)]),
+        )
     } else {
         (
             None,
@@ -423,7 +458,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.prefs_state = Some(preferences::State::from_config(&state.config));
             let (id, open_task) = window::open(preferences_window_settings());
             state.prefs_window = Some(id);
-            open_task.discard()
+            Task::batch([open_task.discard(), fetch_api_token_task(&state.config)])
         }
         Message::OpenAbout => {
             if state.about_window.is_some() {
@@ -546,6 +581,14 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                             .to_string(),
                     );
                 }
+            }
+            Task::none()
+        }
+        Message::ApiTokenLoaded(token) => {
+            // Same reasoning as `LocationDetected`: Preferences may already
+            // be closed by the time this async keychain read resolves.
+            if let Some(prefs_state) = state.prefs_state.as_mut() {
+                prefs_state.token_input = token;
             }
             Task::none()
         }
