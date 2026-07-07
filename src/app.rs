@@ -15,7 +15,7 @@ use iced::{Element, Size, Subscription, Task, Theme, window};
 use crate::config::{AppConfig, ConfigManager, LocationConfig, WeatherApiProvider};
 use crate::ui::temperature::{
     celsius_to_display, compass_direction, distance_to_display, distance_unit, format_local_time,
-    speed_to_display, speed_unit, unit_symbol,
+    pressure_to_display, pressure_unit, speed_to_display, speed_unit, unit_symbol,
 };
 use crate::ui::{about, main_screen, preferences, transition};
 use crate::weather_api::forecast::ForecastResponse;
@@ -216,6 +216,9 @@ fn note_weather_transitions(
     let compass = compass_direction(response.wind.deg);
     let visibility = distance_to_display(response.visibility as f64, use_fahrenheit);
     let visibility_unit = distance_unit(use_fahrenheit);
+    let pressure = pressure_to_display(response.main.pressure, use_fahrenheit);
+    let pressure_unit_str = pressure_unit(use_fahrenheit);
+    let pressure_precision = if use_fahrenheit { 2 } else { 0 };
     let sunrise = format_local_time(response.sys.sunrise, response.timezone);
     let sunset = format_local_time(response.sys.sunset, response.timezone);
 
@@ -223,7 +226,10 @@ fn note_weather_transitions(
     tracker.note("feels_like", &format!("{:.0}{unit}", feels_like));
     tracker.note("humidity", &format!("{}%", response.main.humidity));
     tracker.note("wind", &format!("{:.0} {wind_unit} {compass}", wind_speed));
-    tracker.note("pressure", &format!("{} hPa", response.main.pressure));
+    tracker.note(
+        "pressure",
+        &format!("{:.*} {pressure_unit_str}", pressure_precision, pressure),
+    );
     tracker.note(
         "visibility",
         &format!("{:.1} {visibility_unit}", visibility),

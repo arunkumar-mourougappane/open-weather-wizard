@@ -13,7 +13,7 @@ use crate::app::{AppState, ForecastStatus, Message, WeatherStatus};
 use crate::config::WeatherApiProvider;
 use crate::ui::temperature::{
     celsius_to_display, compass_direction, distance_to_display, distance_unit, format_local_time,
-    speed_to_display, speed_unit, unit_symbol,
+    pressure_to_display, pressure_unit, speed_to_display, speed_unit, unit_symbol,
 };
 use crate::ui::transition::ValueTracker;
 use crate::ui::{forecast_row, icons, skeleton, style};
@@ -283,6 +283,9 @@ fn stats_view_forecast(day: &ForecastDay, use_fahrenheit: bool) -> Element<'_, M
     let compass = compass_direction(day.wind_deg);
     let visibility = distance_to_display(day.visibility as f64, use_fahrenheit);
     let visibility_unit = distance_unit(use_fahrenheit);
+    let pressure = pressure_to_display(day.pressure, use_fahrenheit);
+    let pressure_unit_str = pressure_unit(use_fahrenheit);
+    let pressure_precision = if use_fahrenheit { 2 } else { 0 };
 
     column![
         row![
@@ -320,10 +323,13 @@ fn stats_view_forecast(day: &ForecastDay, use_fahrenheit: bool) -> Element<'_, M
                 "\u{2696}",
                 style::STAT_PRESSURE,
                 "Pressure",
-                text(format!("{} hPa", day.pressure))
-                    .size(15)
-                    .font(BOLD)
-                    .into(),
+                text(format!(
+                    "{:.*} {pressure_unit_str}",
+                    pressure_precision, pressure
+                ))
+                .size(15)
+                .font(BOLD)
+                .into(),
             ),
         ]
         .spacing(10),
@@ -375,6 +381,10 @@ fn stats_view<'a>(
     let visibility = distance_to_display(weather_data.visibility as f64, use_fahrenheit);
     let visibility_unit = distance_unit(use_fahrenheit);
 
+    let pressure = pressure_to_display(weather_data.main.pressure, use_fahrenheit);
+    let pressure_unit_str = pressure_unit(use_fahrenheit);
+    let pressure_precision = if use_fahrenheit { 2 } else { 0 };
+
     let sunrise = format_local_time(weather_data.sys.sunrise, weather_data.timezone);
     let sunset = format_local_time(weather_data.sys.sunset, weather_data.timezone);
 
@@ -425,7 +435,7 @@ fn stats_view<'a>(
                 "Pressure",
                 tracker.cross_fade(
                     "pressure",
-                    format!("{} hPa", weather_data.main.pressure),
+                    format!("{:.*} {pressure_unit_str}", pressure_precision, pressure),
                     15,
                     BOLD,
                     style::default_text,

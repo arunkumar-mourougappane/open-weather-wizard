@@ -8,6 +8,14 @@ ship). Past releases' notes live under
 [`docs/previous_releases/`](docs/previous_releases/) instead of
 accumulating here.
 
+## Unreleased
+
+**Bug fixes**
+
+- Pressure now respects the °F/°C unit toggle like every other stat: hPa in
+  metric mode, inHg in imperial mode. Previously it was hardcoded to hPa
+  regardless of the preference. (#42)
+
 ## v0.3.0
 
 **CLI**
