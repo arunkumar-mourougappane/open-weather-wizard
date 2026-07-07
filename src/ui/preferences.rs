@@ -48,6 +48,15 @@ pub struct State {
     /// convenience prefill, not a required step; the fields can always be
     /// typed in by hand instead.
     pub location_detection_error: Option<String>,
+    /// Whether a connection test (`Message::TestConnectionRequested`,
+    /// intercepted by `app::update`) is currently in flight -- disables the
+    /// "Verify API" button and swaps its label, same idea as
+    /// `is_detecting_location`.
+    pub is_testing_connection: bool,
+    /// Result of the last connection test, cleared on the next attempt.
+    /// Purely informational -- never blocks Save, same philosophy as
+    /// location detection being best-effort.
+    pub connection_test_result: Option<Result<(), String>>,
 }
 
 impl State {
@@ -63,6 +72,8 @@ impl State {
             is_first_run: false,
             is_detecting_location: false,
             location_detection_error: None,
+            is_testing_connection: false,
+            connection_test_result: None,
         }
     }
 
@@ -124,14 +135,21 @@ pub enum Message {
     /// firing an async `Task` isn't something this module's synchronous
     /// `update` can do itself.
     DetectLocationRequested,
+    /// The "Verify API" button -- intercepted by the parent, which
+    /// builds a provider from the *currently-typed* provider/token/location
+    /// (not the saved config), fires a single `get_weather()` call, and
+    /// reports back via the app-level `Message::ConnectionTested`, since
+    /// firing an async `Task` isn't something this module's synchronous
+    /// `update` can do itself.
+    TestConnectionRequested,
     Save,
     Cancel,
 }
 
 /// Mutates field-edit messages; `Save`/`Cancel`/`OpenUrl`/
-/// `DetectLocationRequested` are intercepted by the parent `AppState::update`
-/// (see `src/app.rs`) since they need access to `AppConfig`/the OS's URL
-/// opener/an async `Task` respectively.
+/// `DetectLocationRequested`/`TestConnectionRequested` are intercepted by the
+/// parent `AppState::update` (see `src/app.rs`) since they need access to
+/// `AppConfig`/the OS's URL opener/an async `Task` respectively.
 pub fn update(state: &mut State, message: Message) {
     match message {
         Message::ProviderSelected(provider) => state.provider = provider,
@@ -143,6 +161,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::UnitsToggled(value) => state.use_fahrenheit = value,
         Message::OpenUrl(_)
         | Message::DetectLocationRequested
+        | Message::TestConnectionRequested
         | Message::Save
         | Message::Cancel => {
             // Handled by the parent; nothing to do locally.
@@ -169,30 +188,40 @@ fn api_key_hint(provider: &WeatherApiProvider) -> (&'static str, &'static str) {
 pub fn view(state: &State) -> Element<'_, Message> {
     let (hint_label, hint_url) = api_key_hint(&state.provider);
 
-    let provider_section = section(
-        "\u{2699} Weather Provider",
-        column![
-            labeled_row(
-                "Provider:",
-                pick_list(
-                    PROVIDERS,
-                    Some(state.provider.clone()),
-                    Message::ProviderSelected
-                )
+    let connected = matches!(state.connection_test_result, Some(Ok(())));
+
+    let mut provider_column = column![
+        labeled_row(
+            "Provider:",
+            pick_list(
+                PROVIDERS,
+                Some(state.provider.clone()),
+                Message::ProviderSelected
+            )
+            .into()
+        ),
+        labeled_row(
+            "API Token:",
+            text_input("Enter your API token", &state.token_input)
+                .secure(true)
+                .on_input(Message::TokenChanged)
                 .into()
-            ),
-            labeled_row(
-                "API Token:",
-                text_input("Enter your API token", &state.token_input)
-                    .secure(true)
-                    .on_input(Message::TokenChanged)
-                    .into()
-            ),
-            api_key_hint_row(hint_label, hint_url),
-        ]
-        .spacing(12)
-        .into(),
-    );
+        ),
+        api_key_hint_row(hint_label, hint_url),
+        test_connection_row(state.is_testing_connection, connected),
+    ]
+    .spacing(12);
+
+    if let Some(Err(e)) = &state.connection_test_result {
+        provider_column = provider_column.push(location_hint_row(
+            text(format!("\u{2717} {e}"))
+                .size(12)
+                .style(style::danger)
+                .into(),
+        ));
+    }
+
+    let provider_section = section("\u{2699} Weather Provider", provider_column.into());
 
     let mut location_column = column![
         labeled_row(
@@ -335,6 +364,7 @@ fn api_key_hint_row(label: &'static str, url: &'static str) -> Element<'static, 
             .style(style::link_button)
             .padding(0),
     ]
+    .spacing(12)
     .into()
 }
 
@@ -343,7 +373,9 @@ fn api_key_hint_row(label: &'static str, url: &'static str) -> Element<'static, 
 /// `labeled_row`'s 160px label width) -- used for the location-detection
 /// error line, which isn't itself a button/link like the other hint rows.
 fn location_hint_row(content: Element<'_, Message>) -> Element<'_, Message> {
-    row![space::horizontal().width(160), content].into()
+    row![space::horizontal().width(160), content]
+        .spacing(12)
+        .into()
 }
 
 /// The "Detect my location" button, indented to align under the Home
@@ -363,4 +395,33 @@ fn detect_location_row(is_detecting: bool) -> Element<'static, Message> {
     ]
     .align_y(Alignment::Center)
     .into()
+}
+
+/// The "Verify API" button, indented to align under the API Token
+/// field -- same pattern as `detect_location_row`. A successful result is
+/// shown inline right next to the button (rather than a full row below,
+/// like the error case in `view`) since "\u{2714} Connected" is short
+/// enough to never wrap. Uses the plain Heavy Check Mark glyph (colored via
+/// `style::success`) rather than the ✅ emoji -- iced's text renderer draws
+/// glyphs from the system's default font, and color emoji isn't guaranteed
+/// to render in full color there, unlike a typographic glyph.
+fn test_connection_row(is_testing: bool, connected: bool) -> Element<'static, Message> {
+    let mut content = row![
+        space::horizontal().width(160),
+        button(text(if is_testing {
+            "Verifying..."
+        } else {
+            "Verify API"
+        }))
+        .on_press_maybe((!is_testing).then_some(Message::TestConnectionRequested))
+        .style(style::accent_button),
+    ]
+    .spacing(12)
+    .align_y(Alignment::Center);
+
+    if connected {
+        content = content.push(text("\u{2714} Connected").size(13).style(style::success));
+    }
+
+    content.into()
 }
