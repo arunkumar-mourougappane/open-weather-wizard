@@ -45,6 +45,20 @@ pub fn distance_unit(fahrenheit: bool) -> &'static str {
     if fahrenheit { "mi" } else { "km" }
 }
 
+/// Pressure is always fetched in hPa; converts to inHg for the imperial
+/// preference (1 hPa = 0.02953 inHg).
+pub fn pressure_to_display(hpa: i64, fahrenheit: bool) -> f64 {
+    if fahrenheit {
+        hpa as f64 * 0.02953
+    } else {
+        hpa as f64
+    }
+}
+
+pub fn pressure_unit(fahrenheit: bool) -> &'static str {
+    if fahrenheit { "inHg" } else { "hPa" }
+}
+
 /// Meteorological degrees (0 = due north, clockwise) to a 16-point compass
 /// abbreviation.
 pub fn compass_direction(deg: i64) -> &'static str {
