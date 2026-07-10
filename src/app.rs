@@ -658,9 +658,19 @@ pub fn view(state: &AppState, window_id: window::Id) -> Element<'_, Message> {
 }
 
 pub fn subscription(state: &AppState) -> Subscription<Message> {
-    let refresh_interval = match state.config.weather_provider {
-        WeatherApiProvider::GoogleWeather => GOOGLE_WEATHER_REFRESH_INTERVAL,
-        WeatherApiProvider::OpenWeather => AUTO_REFRESH_INTERVAL,
+    let refresh_interval = match state.config.refresh_interval_secs {
+        Some(secs) => {
+            let duration = Duration::from_secs(secs);
+            if state.config.weather_provider == WeatherApiProvider::GoogleWeather {
+                duration.max(GOOGLE_WEATHER_REFRESH_INTERVAL)
+            } else {
+                duration
+            }
+        }
+        None => match state.config.weather_provider {
+            WeatherApiProvider::GoogleWeather => GOOGLE_WEATHER_REFRESH_INTERVAL,
+            WeatherApiProvider::OpenWeather => AUTO_REFRESH_INTERVAL,
+        },
     };
     Subscription::batch([
         iced::time::every(refresh_interval).map(Message::Tick),

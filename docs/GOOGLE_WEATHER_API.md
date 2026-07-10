@@ -187,11 +187,12 @@ would need its own mapping since the day/night split has no equivalent in
   after a free tier of 10,000 calls/month.
 - Optional bundled subscription plans exist (Starter/Essentials/Pro,
   $100–$1,200/month) covering combined Maps Platform SKU usage, but pay-as-you-go
-  is the relevant model for a single desktop app polling one endpoint on a
-  30s `Tick` subscription — worth sanity-checking the free-tier math against
-  `src/app.rs`'s refresh interval before wiring this in for real
-  (30s polling × 2 endpoints ≈ 5,760 calls/day, well over the 10k/month free
-  cap on its own for a single always-open instance).
+  is the relevant model for a single desktop app.
+- The auto-refresh interval is user-configurable (defaults to 15 minutes for Google Weather,
+  with a hardcoded floor of 15 minutes enforced in preferences validation and subscription tick setup).
+  At 15 minutes, a single always-running instance generates 3 billable calls per refresh (current conditions + 2 forecast pages),
+  totaling ~8,640 calls/month, which stays safely within the 10,000 free monthly calls. Lowering the refresh interval below
+  15 minutes is disallowed for Google Weather to protect the free tier budget.
 
 ## What's not covered by the current mock
 

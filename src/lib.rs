@@ -73,14 +73,69 @@ mod tests {
             state: "TS".to_string(),
             country: "TC".to_string(),
         };
+        config.refresh_interval_secs = Some(900);
 
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("GoogleWeather"));
         assert!(json.contains("Test City"));
+        assert!(json.contains("refresh_interval_secs"));
+        assert!(json.contains("900"));
         assert!(!json.contains("api_token"));
 
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.location.city, "Test City");
+        assert_eq!(deserialized.refresh_interval_secs, Some(900));
+
+        // Test migration-safe default where refresh_interval_secs is missing.
+        let missing_interval_json = r#"{"weather_provider":"OpenWeather","location":{"city":"Peoria","state":"IL","country":"US"},"dark_mode":false,"use_fahrenheit":false}"#;
+        let deserialized_default: AppConfig = serde_json::from_str(missing_interval_json).unwrap();
+        assert_eq!(deserialized_default.refresh_interval_secs, None);
+    }
+
+    /// Verifies that the refresh interval validation logic enforces the
+    /// Google Weather rate limits while allowing fast intervals for OpenWeather.
+    #[test]
+    fn test_refresh_interval_validation() {
+        use crate::ui::preferences::{RefreshIntervalPreset, State as PrefsState};
+
+        let mut config = AppConfig::default();
+        config.weather_provider = WeatherApiProvider::OpenWeather;
+        config.refresh_interval_secs = Some(30);
+
+        // OpenWeather with 30 seconds is valid.
+        let mut prefs_state = PrefsState::from_config(&config);
+        // Set inputs to valid strings so other validators don't trigger.
+        prefs_state.token_input = "dummy_token".to_string();
+        prefs_state.city_input = "Peoria".to_string();
+        prefs_state.country_input = "US".to_string();
+
+        let errors = prefs_state.validation_errors();
+        assert!(
+            errors.is_empty(),
+            "OpenWeather with 30s should be valid: {:?}",
+            errors
+        );
+
+        // Switching provider to Google Weather with 30s preset is invalid.
+        prefs_state.provider = WeatherApiProvider::GoogleWeather;
+        prefs_state.refresh_interval = RefreshIntervalPreset::ThirtySeconds;
+        let errors = prefs_state.validation_errors();
+        assert!(
+            !errors.is_empty(),
+            "Google Weather with 30s should be invalid"
+        );
+        assert!(errors.iter().any(|e| {
+            e.contains("Google Weather requires a refresh interval of at least 15 minutes")
+        }));
+
+        // Google Weather with 15 minutes is valid.
+        prefs_state.refresh_interval = RefreshIntervalPreset::FifteenMinutes;
+        let errors = prefs_state.validation_errors();
+        assert!(
+            errors.is_empty(),
+            "Google Weather with 15m should be valid: {:?}",
+            errors
+        );
     }
 
     /// Verifies that a config file saved by an older version of this app
