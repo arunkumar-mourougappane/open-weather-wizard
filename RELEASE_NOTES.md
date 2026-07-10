@@ -12,6 +12,7 @@ accumulating here.
 
 **Interface**
 
+- The auto-refresh interval is now user-configurable in Preferences (presets: 30s / 1m / 5m / 15m / 30m). To protect Google Maps Platform rate limits, a 15-minute floor is strictly enforced when using the Google Weather provider. (#44)
 - Preferences now has a "Verify API" button next to the API Token field:
   fires a single live request against the currently-typed
   provider/token/location (not the saved config) and shows an inline

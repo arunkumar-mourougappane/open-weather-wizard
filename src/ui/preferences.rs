@@ -23,6 +23,72 @@ const PROVIDERS: [WeatherApiProvider; 2] = [
     WeatherApiProvider::GoogleWeather,
 ];
 
+/// Presets for the auto-refresh polling interval, offered as a pick list
+/// to prevent accidental rates-quota violations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefreshIntervalPreset {
+    ThirtySeconds,
+    OneMinute,
+    FiveMinutes,
+    FifteenMinutes,
+    ThirtyMinutes,
+}
+
+impl RefreshIntervalPreset {
+    pub const ALL: [Self; 5] = [
+        Self::ThirtySeconds,
+        Self::OneMinute,
+        Self::FiveMinutes,
+        Self::FifteenMinutes,
+        Self::ThirtyMinutes,
+    ];
+
+    pub fn to_secs(self) -> u64 {
+        match self {
+            Self::ThirtySeconds => 30,
+            Self::OneMinute => 60,
+            Self::FiveMinutes => 5 * 60,
+            Self::FifteenMinutes => 15 * 60,
+            Self::ThirtyMinutes => 30 * 60,
+        }
+    }
+
+    pub fn from_secs(secs: u64) -> Self {
+        match secs {
+            30 => Self::ThirtySeconds,
+            60 => Self::OneMinute,
+            300 => Self::FiveMinutes,
+            900 => Self::FifteenMinutes,
+            1800 => Self::ThirtyMinutes,
+            _ => {
+                if secs <= 30 {
+                    Self::ThirtySeconds
+                } else if secs <= 60 {
+                    Self::OneMinute
+                } else if secs <= 300 {
+                    Self::FiveMinutes
+                } else if secs <= 900 {
+                    Self::FifteenMinutes
+                } else {
+                    Self::ThirtyMinutes
+                }
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for RefreshIntervalPreset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ThirtySeconds => write!(f, "30 seconds"),
+            Self::OneMinute => write!(f, "1 minute"),
+            Self::FiveMinutes => write!(f, "5 minutes"),
+            Self::FifteenMinutes => write!(f, "15 minutes"),
+            Self::ThirtyMinutes => write!(f, "30 minutes"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct State {
     pub provider: WeatherApiProvider,
@@ -32,6 +98,7 @@ pub struct State {
     pub country_input: String,
     pub dark_mode: bool,
     pub use_fahrenheit: bool,
+    pub refresh_interval: RefreshIntervalPreset,
     /// Set by `app::boot` when this window was opened automatically because
     /// no config file existed yet (see `ConfigManager::config_exists`).
     /// Purely cosmetic -- swaps in a welcome banner (`view`) and the
@@ -80,6 +147,13 @@ impl State {
             country_input: config.location.country.clone(),
             dark_mode: config.dark_mode,
             use_fahrenheit: config.use_fahrenheit,
+            refresh_interval: config
+                .refresh_interval_secs
+                .map(RefreshIntervalPreset::from_secs)
+                .unwrap_or_else(|| match config.weather_provider {
+                    WeatherApiProvider::GoogleWeather => RefreshIntervalPreset::FifteenMinutes,
+                    WeatherApiProvider::OpenWeather => RefreshIntervalPreset::ThirtySeconds,
+                }),
             is_first_run: false,
             is_detecting_location: false,
             location_detection_error: None,
@@ -101,6 +175,7 @@ impl State {
         config.location.country = self.country_input.clone();
         config.dark_mode = self.dark_mode;
         config.use_fahrenheit = self.use_fahrenheit;
+        config.refresh_interval_secs = Some(self.refresh_interval.to_secs());
         Ok(())
     }
 
@@ -121,6 +196,14 @@ impl State {
         if self.token_input.trim().is_empty() {
             errors.push(format!("API Token is required for {}.", self.provider));
         }
+        // Validate Google Weather refresh interval constraint
+        if self.provider == WeatherApiProvider::GoogleWeather
+            && self.refresh_interval.to_secs() < 15 * 60
+        {
+            errors.push(
+                "Google Weather requires a refresh interval of at least 15 minutes.".to_string(),
+            );
+        }
 
         errors
     }
@@ -135,6 +218,7 @@ pub enum Message {
     CountryChanged(String),
     DarkModeToggled(bool),
     UnitsToggled(bool),
+    RefreshIntervalSelected(RefreshIntervalPreset),
     /// The "Get an API key" link -- intercepted by the parent (see
     /// `src/app.rs`) and turned into `Message::OpenUrl`, since opening a
     /// browser is an app-level concern, not something this module does
@@ -170,6 +254,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::CountryChanged(value) => state.country_input = value,
         Message::DarkModeToggled(value) => state.dark_mode = value,
         Message::UnitsToggled(value) => state.use_fahrenheit = value,
+        Message::RefreshIntervalSelected(value) => state.refresh_interval = value,
         Message::OpenUrl(_)
         | Message::DetectLocationRequested
         | Message::TestConnectionRequested
@@ -274,7 +359,7 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let location_section = section("\u{2302} Home", location_column.into());
 
     let appearance_section = section(
-        "\u{263e} Appearance",
+        "\u{263e} Appearance & Refresh",
         column![
             toggler(state.dark_mode)
                 .label("Dark mode")
@@ -282,6 +367,16 @@ pub fn view(state: &State) -> Element<'_, Message> {
             toggler(state.use_fahrenheit)
                 .label("Use Fahrenheit (\u{b0}F)")
                 .on_toggle(Message::UnitsToggled),
+            labeled_row(
+                "Refresh Interval:",
+                pick_list(
+                    &RefreshIntervalPreset::ALL[..],
+                    Some(state.refresh_interval),
+                    Message::RefreshIntervalSelected
+                )
+                .style(style::pick_list)
+                .into()
+            ),
         ]
         .spacing(12)
         .into(),

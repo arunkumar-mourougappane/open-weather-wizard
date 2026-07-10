@@ -82,6 +82,11 @@ pub struct AppConfig {
     /// so toggling this doesn't trigger a re-fetch.
     #[serde(default)]
     pub use_fahrenheit: bool,
+    /// The user-configured auto-refresh interval in seconds.
+    /// `#[serde(default)]` ensures missing values default to None, retaining
+    /// default per-provider rates.
+    #[serde(default)]
+    pub refresh_interval_secs: Option<u64>,
     /// Present only to read config files saved by older versions of this
     /// app, which stored the API token base64-"encoded" (not encrypted)
     /// directly here. `#[serde(skip_serializing)]` means this is never
@@ -101,6 +106,7 @@ impl Default for AppConfig {
             location: LocationConfig::default(),
             dark_mode: false,
             use_fahrenheit: false,
+            refresh_interval_secs: None,
             legacy_api_token_encoded: None,
         }
     }
