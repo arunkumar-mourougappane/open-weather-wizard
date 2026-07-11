@@ -7,7 +7,7 @@
 use std::time::Instant;
 
 use iced::widget::{button, column, container, row, scrollable, space, text, tooltip};
-use iced::{Alignment, Color, Element, Font, Length, font};
+use iced::{font, Alignment, Color, Element, Font, Length, Theme};
 
 use crate::app::{AppState, ForecastStatus, Message, WeatherStatus};
 use crate::config::WeatherApiProvider;
@@ -17,6 +17,7 @@ use crate::ui::temperature::{
 };
 use crate::ui::transition::ValueTracker;
 use crate::ui::{forecast_row, icons, skeleton, style};
+use crate::weather_api::alerts::{AlertSeverity, WeatherAlert};
 use crate::weather_api::forecast::ForecastDay;
 use crate::weather_api::openweather_api::{ApiResponse, Weather, get_weather_symbol};
 
@@ -87,6 +88,7 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         };
 
         let mut card = column![
+            alerts_view(&state.alerts),
             row![
                 hero_view(
                     weather_data,
@@ -172,6 +174,51 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         provider_ribbon(&state.config.weather_provider),
     ]
     .into()
+}
+
+fn alerts_view(alerts: &[WeatherAlert]) -> Element<'_, Message> {
+    if alerts.is_empty() {
+        return iced::widget::Space::new().into();
+    }
+    
+    let mut layout = column![].spacing(8).width(Length::Fill);
+    
+    for alert in alerts {
+        let (icon, _) = match alert.severity {
+            AlertSeverity::Extreme | AlertSeverity::Severe => ("\u{26A0}", ()), // Warning sign
+            _ => ("\u{24D8}", ()), // Info sign
+        };
+
+        let alert_banner = container(
+            row![
+                text(icon).size(16).style(style::danger),
+                text(&alert.title).size(14).font(BOLD).style(style::danger),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        )
+        .padding(12)
+        .width(Length::Fill)
+        .style(move |theme: &Theme| {
+            let palette = theme.extended_palette();
+            container::Style {
+                background: Some(iced::Background::Color(Color {
+                    a: 0.1,
+                    ..palette.danger.base.color
+                })),
+                border: iced::Border {
+                    color: palette.danger.base.color,
+                    width: 1.0,
+                    radius: 8.0.into(),
+                },
+                ..container::Style::default()
+            }
+        });
+        
+        layout = layout.push(alert_banner);
+    }
+    
+    layout.into()
 }
 
 /// A thin footer strip naming whichever provider is currently powering the

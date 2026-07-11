@@ -14,6 +14,7 @@
 //!   based on the application's configuration.
 
 use crate::config::{LocationConfig, WeatherApiProvider};
+use crate::weather_api::alerts::WeatherAlert;
 use crate::weather_api::forecast::ForecastResponse;
 use crate::weather_api::openweather_api::{ApiError, ApiResponse, Location};
 use async_trait::async_trait;
@@ -40,6 +41,14 @@ pub trait WeatherProvider {
     /// # Errors
     /// Returns an `ApiError` if the data cannot be fetched.
     async fn get_forecast(&self, location: &LocationConfig) -> Result<ForecastResponse, ApiError>;
+
+    /// Fetches active weather alerts for a given location.
+    ///
+    /// # Errors
+    /// Returns an `ApiError` if the data cannot be fetched.
+    async fn get_alerts(&self, _location: &LocationConfig) -> Result<Vec<WeatherAlert>, ApiError> {
+        Ok(vec![])
+    }
 }
 
 /// A factory for creating weather providers.
