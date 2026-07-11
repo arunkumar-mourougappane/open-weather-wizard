@@ -885,3 +885,504 @@ pub fn run() -> iced::Result {
         .subscription(subscription)
         .run()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::SavedLocation;
+    use crate::weather_api::forecast::ForecastDay;
+    use crate::weather_api::openweather_api::{Main, Sys, Weather, WeatherSymbol, Wind};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// Builds an `AppState` for testing without going through `boot()` --
+    /// `boot()` opens real OS windows via `window::open`, which needs a
+    /// live iced runtime to actually do anything. Neither `window::Id::
+    /// unique()` nor `ConfigManager::for_path` (pointed at a scratch file)
+    /// need one, so this builds a fully usable `AppState` directly.
+    /// `update()`'s handlers don't need a runtime either -- `window::
+    /// open()`/`Task::perform(...)` just build inert `Task` *descriptions*;
+    /// nothing here ever executes one, so no window actually opens and no
+    /// network/keychain call actually fires.
+    ///
+    /// Returns the scratch config path alongside the state so tests that
+    /// exercise `config_manager.save_config` (`LocationSwitched`,
+    /// `Preferences::Save`) can clean it up afterward -- harmless to ignore
+    /// for tests that never write to it.
+    fn test_state(config: AppConfig) -> (AppState, std::path::PathBuf) {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("open-weather-wizard-app-test-{n}.json"));
+        let config_manager = ConfigManager::for_path(path.clone());
+
+        (
+            AppState {
+                config,
+                config_manager,
+                weather: WeatherStatus::Loading,
+                forecast: ForecastStatus::Loading,
+                alerts: vec![],
+                system_theme: Theme::Light,
+                last_updated: None,
+                value_tracker: transition::ValueTracker::default(),
+                selected_forecast_day: None,
+                main_window: window::Id::unique(),
+                prefs_window: None,
+                prefs_state: None,
+                about_window: None,
+                is_first_run: false,
+            },
+            path,
+        )
+    }
+
+    fn sample_weather(name: &str) -> ApiResponse {
+        ApiResponse {
+            weather: vec![Weather {
+                main: "Clear".to_string(),
+                description: "clear sky".to_string(),
+            }],
+            main: Main {
+                temp: 20.0,
+                feels_like: 19.0,
+                temp_min: 15.0,
+                temp_max: 25.0,
+                pressure: 1013,
+                humidity: 50,
+            },
+            wind: Wind {
+                speed: 3.0,
+                deg: 180,
+            },
+            visibility: 10_000,
+            sys: Sys {
+                sunrise: 0,
+                sunset: 0,
+            },
+            timezone: 0,
+            name: name.to_string(),
+        }
+    }
+
+    fn sample_forecast(days: usize) -> ForecastResponse {
+        ForecastResponse {
+            location_name: "Test City".to_string(),
+            days: (0..days)
+                .map(|i| ForecastDay {
+                    date: format!("2026-01-{:02}", i + 1),
+                    temp_min: 10.0,
+                    temp_max: 20.0,
+                    description: "clear sky".to_string(),
+                    symbol: WeatherSymbol::Clear,
+                    feels_like: 15.0,
+                    humidity: 50,
+                    wind_speed: 2.0,
+                    wind_deg: 90,
+                    pressure: 1013,
+                    visibility: 10_000,
+                    pop: 0.1,
+                })
+                .collect(),
+        }
+    }
+
+    /// A config with two saved locations ("Home" at index 0, from
+    /// `AppConfig::default()`, plus "Work" appended at index 1).
+    fn two_location_config() -> AppConfig {
+        let mut config = AppConfig::default();
+        config.locations.push(SavedLocation {
+            name: "Work".to_string(),
+            location: LocationConfig {
+                city: "Chicago".to_string(),
+                state: "IL".to_string(),
+                country: "US".to_string(),
+            },
+        });
+        config
+    }
+
+    #[test]
+    fn test_forecast_day_selected_toggles_selection() {
+        let (mut state, path) = test_state(AppConfig::default());
+
+        let _ = update(&mut state, Message::ForecastDaySelected(2));
+        assert_eq!(state.selected_forecast_day, Some(2));
+
+        // Re-selecting the same day clears back to live conditions.
+        let _ = update(&mut state, Message::ForecastDaySelected(2));
+        assert_eq!(state.selected_forecast_day, None);
+
+        let _ = update(&mut state, Message::ForecastDaySelected(3));
+        assert_eq!(state.selected_forecast_day, Some(3));
+
+        // Index 0 ("Today") always clears, regardless of what was selected.
+        let _ = update(&mut state, Message::ForecastDaySelected(0));
+        assert_eq!(state.selected_forecast_day, None);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_location_switched_updates_current_and_discards_stale_data() {
+        let (mut state, path) = test_state(two_location_config());
+        state.weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        state.forecast = ForecastStatus::Loaded(sample_forecast(3));
+        state.alerts = vec![WeatherAlert {
+            id: "1".to_string(),
+            title: "Test Alert".to_string(),
+            description: String::new(),
+            event_type: String::new(),
+            severity: crate::weather_api::alerts::AlertSeverity::Minor,
+            start_time: 0,
+            end_time: 0,
+            urgency: String::new(),
+            certainty: String::new(),
+            area_name: String::new(),
+            instruction: vec![],
+            safety_recommendations: vec![],
+        }];
+        state.selected_forecast_day = Some(1);
+        state.last_updated = Some(Instant::now());
+
+        let _ = update(&mut state, Message::LocationSwitched(1));
+
+        assert_eq!(state.config.current_location_index, 1);
+        assert!(matches!(state.weather, WeatherStatus::Loading));
+        assert!(matches!(state.forecast, ForecastStatus::Loading));
+        assert!(
+            state.alerts.is_empty(),
+            "alerts belong to the previous location and shouldn't carry forward"
+        );
+        assert_eq!(state.selected_forecast_day, None);
+        assert_eq!(state.last_updated, None);
+
+        // Persisted immediately, independent of Preferences Save/Cancel.
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("\"current_location_index\": 1"));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_location_switched_ignores_out_of_range_and_same_index() {
+        let (mut state, path) = test_state(two_location_config());
+        state.weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+
+        // Out of range: no-op.
+        let _ = update(&mut state, Message::LocationSwitched(5));
+        assert_eq!(state.config.current_location_index, 0);
+        assert!(matches!(state.weather, WeatherStatus::Loaded(_)));
+
+        // Same as current: no-op, shouldn't discard perfectly good data.
+        let _ = update(&mut state, Message::LocationSwitched(0));
+        assert_eq!(state.config.current_location_index, 0);
+        assert!(matches!(state.weather, WeatherStatus::Loaded(_)));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_refresh_requested_carries_forward_loaded_data_as_refreshing() {
+        let (mut state, path) = test_state(AppConfig::default());
+        state.weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        state.forecast = ForecastStatus::Loaded(sample_forecast(2));
+
+        let _ = update(&mut state, Message::RefreshRequested);
+
+        match &state.weather {
+            WeatherStatus::Refreshing(data) => assert_eq!(data.name, "Peoria"),
+            other => panic!("expected Refreshing, got {other:?}"),
+        }
+        match &state.forecast {
+            ForecastStatus::Refreshing(data) => assert_eq!(data.days.len(), 2),
+            other => panic!("expected Refreshing, got {other:?}"),
+        }
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_refresh_requested_leaves_loading_as_loading() {
+        let (mut state, path) = test_state(AppConfig::default());
+        // Fresh state: still `Loading` (never fetched yet).
+        let _ = update(&mut state, Message::RefreshRequested);
+        assert!(matches!(state.weather, WeatherStatus::Loading));
+        assert!(matches!(state.forecast, ForecastStatus::Loading));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_weather_fetched_ok_sets_loaded_and_last_updated() {
+        let (mut state, path) = test_state(AppConfig::default());
+        assert!(state.last_updated.is_none());
+
+        let _ = update(
+            &mut state,
+            Message::WeatherFetched(Ok(sample_weather("Peoria"))),
+        );
+
+        assert!(matches!(state.weather, WeatherStatus::Loaded(_)));
+        assert!(state.last_updated.is_some());
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_weather_fetched_err_keeps_data_when_refreshing_else_shows_error() {
+        let (mut state, path) = test_state(AppConfig::default());
+
+        // A background refresh failing shouldn't blank out good data.
+        state.weather = WeatherStatus::Refreshing(sample_weather("Peoria"));
+        let _ = update(&mut state, Message::WeatherFetched(Err("boom".to_string())));
+        match &state.weather {
+            WeatherStatus::Loaded(data) => assert_eq!(data.name, "Peoria"),
+            other => panic!("expected Loaded (kept), got {other:?}"),
+        }
+
+        // A first-load failure (nothing to show yet) surfaces the error.
+        state.weather = WeatherStatus::Loading;
+        let _ = update(&mut state, Message::WeatherFetched(Err("boom".to_string())));
+        assert!(matches!(state.weather, WeatherStatus::Error(_)));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_forecast_fetched_clears_stale_selected_day_when_out_of_range() {
+        let (mut state, path) = test_state(AppConfig::default());
+        state.selected_forecast_day = Some(4);
+
+        let _ = update(&mut state, Message::ForecastFetched(Ok(sample_forecast(2))));
+
+        assert_eq!(
+            state.selected_forecast_day, None,
+            "a selection past the newly-fetched day count should reset to live conditions"
+        );
+        assert!(matches!(state.forecast, ForecastStatus::Loaded(_)));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_forecast_fetched_keeps_selected_day_when_still_in_range() {
+        let (mut state, path) = test_state(AppConfig::default());
+        state.selected_forecast_day = Some(1);
+
+        let _ = update(&mut state, Message::ForecastFetched(Ok(sample_forecast(3))));
+
+        assert_eq!(state.selected_forecast_day, Some(1));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_alerts_fetched_ok_replaces_and_err_keeps_existing() {
+        let (mut state, path) = test_state(AppConfig::default());
+
+        let _ = update(&mut state, Message::AlertsFetched(Ok(vec![])));
+        assert!(state.alerts.is_empty());
+
+        let alert = crate::weather_api::alerts::WeatherAlert {
+            id: "1".to_string(),
+            title: "Severe Thunderstorm".to_string(),
+            description: String::new(),
+            event_type: String::new(),
+            severity: crate::weather_api::alerts::AlertSeverity::Severe,
+            start_time: 0,
+            end_time: 0,
+            urgency: String::new(),
+            certainty: String::new(),
+            area_name: String::new(),
+            instruction: vec![],
+            safety_recommendations: vec![],
+        };
+        let _ = update(&mut state, Message::AlertsFetched(Ok(vec![alert])));
+        assert_eq!(state.alerts.len(), 1);
+
+        // A failed alerts fetch keeps whatever was already there.
+        let _ = update(&mut state, Message::AlertsFetched(Err("boom".to_string())));
+        assert_eq!(state.alerts.len(), 1);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_open_preferences_and_about_are_idempotent() {
+        let (mut state, path) = test_state(AppConfig::default());
+
+        let _ = update(&mut state, Message::OpenPreferences);
+        assert!(state.prefs_window.is_some());
+        assert!(state.prefs_state.is_some());
+        let first_prefs_window = state.prefs_window;
+
+        // Already open -- a second request shouldn't replace the window or
+        // reset the in-progress draft.
+        let _ = update(&mut state, Message::OpenPreferences);
+        assert_eq!(state.prefs_window, first_prefs_window);
+
+        let _ = update(&mut state, Message::OpenAbout);
+        assert!(state.about_window.is_some());
+        let first_about_window = state.about_window;
+
+        let _ = update(&mut state, Message::OpenAbout);
+        assert_eq!(state.about_window, first_about_window);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_preferences_save_discards_stale_data_only_when_current_location_changes() {
+        use crate::ui::preferences;
+
+        // Case 1: an edit unrelated to location (theme) shouldn't touch
+        // weather/forecast at all -- the ordinary `RefreshRequested` path
+        // (fired after Save, not exercised directly here) still gets to
+        // decide whether to keep showing last-known-good data.
+        let (mut state, path) = test_state(AppConfig::default());
+        state.weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        state.prefs_state = Some(preferences::State::from_config(&state.config));
+        preferences::update(
+            state.prefs_state.as_mut().unwrap(),
+            preferences::Message::ThemePreferenceSelected(ThemePreference::Dark),
+        );
+        let _ = update(&mut state, Message::Preferences(preferences::Message::Save));
+        assert!(
+            matches!(state.weather, WeatherStatus::Loaded(_)),
+            "a save that doesn't change the current location shouldn't discard existing data"
+        );
+        let _ = std::fs::remove_file(&path);
+
+        // Case 2: editing the *active* location's own city directly changes
+        // what current_location() resolves to, and should discard stale data
+        // the same way `LocationSwitched` does.
+        let (mut state, path) = test_state(AppConfig::default());
+        state.weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        state.prefs_state = Some(preferences::State::from_config(&state.config));
+        preferences::update(
+            state.prefs_state.as_mut().unwrap(),
+            preferences::Message::CityChanged("Chicago".to_string()),
+        );
+        let _ = update(&mut state, Message::Preferences(preferences::Message::Save));
+        assert!(
+            matches!(state.weather, WeatherStatus::Loading),
+            "editing the active location's own fields should discard the old place's data"
+        );
+        assert_eq!(state.config.current_location().city, "Chicago");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_preferences_cancel_discards_draft_without_saving() {
+        use crate::ui::preferences;
+
+        let (mut state, path) = test_state(AppConfig::default());
+        let _ = update(&mut state, Message::OpenPreferences);
+        preferences::update(
+            state.prefs_state.as_mut().unwrap(),
+            preferences::Message::CityChanged("Chicago".to_string()),
+        );
+
+        let _ = update(
+            &mut state,
+            Message::Preferences(preferences::Message::Cancel),
+        );
+
+        assert!(state.prefs_state.is_none());
+        assert!(state.prefs_window.is_none());
+        assert_eq!(
+            state.config.current_location().city,
+            "Peoria",
+            "Cancel must not write the draft's edits back into AppConfig"
+        );
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_theme_resolves_explicit_light_and_dark_regardless_of_system() {
+        let (mut state, path) = test_state(AppConfig::default());
+        state.system_theme = Theme::Dark;
+
+        state.config.theme_preference = ThemePreference::Light;
+        assert_eq!(theme(&state, state.main_window), Theme::Light);
+
+        state.config.theme_preference = ThemePreference::Dark;
+        assert_eq!(theme(&state, state.main_window), Theme::Dark);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_theme_system_uses_detected_system_theme() {
+        let (mut state, path) = test_state(AppConfig::default());
+        state.config.theme_preference = ThemePreference::System;
+        state.system_theme = Theme::Dark;
+
+        assert_eq!(theme(&state, state.main_window), Theme::Dark);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_theme_previews_live_preferences_draft_over_saved_config() {
+        use crate::ui::preferences;
+
+        let (mut state, path) = test_state(AppConfig::default());
+        state.config.theme_preference = ThemePreference::Light;
+        state.prefs_state = Some(preferences::State::from_config(&state.config));
+
+        // Not saved yet -- but the open draft's live edit should already
+        // preview across every window.
+        preferences::update(
+            state.prefs_state.as_mut().unwrap(),
+            preferences::Message::ThemePreferenceSelected(ThemePreference::Dark),
+        );
+        assert_eq!(theme(&state, state.main_window), Theme::Dark);
+        assert_eq!(
+            state.config.theme_preference,
+            ThemePreference::Light,
+            "the saved config itself shouldn't change until Save"
+        );
+
+        // Once the draft is gone (Cancel/Save closed the window), fall back
+        // to the persisted config again.
+        state.prefs_state = None;
+        assert_eq!(theme(&state, state.main_window), Theme::Light);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_title_reflects_which_window_and_first_run_state() {
+        let (mut state, path) = test_state(AppConfig::default());
+        let prefs_window = window::Id::unique();
+        let about_window = window::Id::unique();
+        state.prefs_window = Some(prefs_window);
+        state.about_window = Some(about_window);
+
+        assert_eq!(title(&state, state.main_window), "Weather Wizard");
+        assert_eq!(title(&state, about_window), "About Weather Wizard");
+
+        state.is_first_run = true;
+        assert_eq!(title(&state, prefs_window), "Welcome to Weather Wizard");
+        state.is_first_run = false;
+        assert_eq!(title(&state, prefs_window), "Preferences");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_title_shows_current_location_name_only_with_multiple_locations() {
+        let (state, path) = test_state(AppConfig::default());
+        assert_eq!(
+            title(&state, state.main_window),
+            "Weather Wizard",
+            "a single 'Home' location is unnamed noise in the title"
+        );
+        let _ = std::fs::remove_file(&path);
+
+        let (state, path) = test_state(two_location_config());
+        assert_eq!(title(&state, state.main_window), "Weather Wizard — Home");
+        let _ = std::fs::remove_file(&path);
+    }
+}
