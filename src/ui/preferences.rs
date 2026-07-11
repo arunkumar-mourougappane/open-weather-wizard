@@ -98,6 +98,7 @@ pub struct State {
     pub country_input: String,
     pub dark_mode: bool,
     pub use_fahrenheit: bool,
+    pub launch_at_login: bool,
     pub refresh_interval: RefreshIntervalPreset,
     /// Set by `app::boot` when this window was opened automatically because
     /// no config file existed yet (see `ConfigManager::config_exists`).
@@ -147,6 +148,7 @@ impl State {
             country_input: config.location.country.clone(),
             dark_mode: config.dark_mode,
             use_fahrenheit: config.use_fahrenheit,
+            launch_at_login: config.launch_at_login,
             refresh_interval: config
                 .refresh_interval_secs
                 .map(RefreshIntervalPreset::from_secs)
@@ -175,7 +177,9 @@ impl State {
         config.location.country = self.country_input.clone();
         config.dark_mode = self.dark_mode;
         config.use_fahrenheit = self.use_fahrenheit;
+        config.launch_at_login = self.launch_at_login;
         config.refresh_interval_secs = Some(self.refresh_interval.to_secs());
+        config.update_auto_launch().map_err(|e| format!("Failed to configure auto-launch: {}", e))?;
         Ok(())
     }
 
@@ -218,6 +222,7 @@ pub enum Message {
     CountryChanged(String),
     DarkModeToggled(bool),
     UnitsToggled(bool),
+    LaunchAtLoginToggled(bool),
     RefreshIntervalSelected(RefreshIntervalPreset),
     /// The "Get an API key" link -- intercepted by the parent (see
     /// `src/app.rs`) and turned into `Message::OpenUrl`, since opening a
@@ -254,6 +259,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::CountryChanged(value) => state.country_input = value,
         Message::DarkModeToggled(value) => state.dark_mode = value,
         Message::UnitsToggled(value) => state.use_fahrenheit = value,
+        Message::LaunchAtLoginToggled(value) => state.launch_at_login = value,
         Message::RefreshIntervalSelected(value) => state.refresh_interval = value,
         Message::OpenUrl(_)
         | Message::DetectLocationRequested
@@ -367,6 +373,9 @@ pub fn view(state: &State) -> Element<'_, Message> {
             toggler(state.use_fahrenheit)
                 .label("Use Fahrenheit (\u{b0}F)")
                 .on_toggle(Message::UnitsToggled),
+            toggler(state.launch_at_login)
+                .label("Launch at login")
+                .on_toggle(Message::LaunchAtLoginToggled),
             labeled_row(
                 "Refresh Interval:",
                 pick_list(
