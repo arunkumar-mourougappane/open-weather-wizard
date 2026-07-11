@@ -13,7 +13,7 @@
 //!   instances of `WeatherProvider` (e.g., `OpenWeatherProvider`, `GoogleWeatherProvider`)
 //!   based on the application's configuration.
 
-use crate::config::{LocationConfig, WeatherApiProvider};
+use crate::config::{Language, LocationConfig, WeatherApiProvider};
 use crate::weather_api::alerts::WeatherAlert;
 use crate::weather_api::forecast::ForecastResponse;
 use crate::weather_api::openweather_api::{ApiError, ApiResponse, Location};
@@ -63,24 +63,27 @@ impl WeatherProviderFactory {
     ///
     /// * `provider_type` - The type of weather provider to create.
     /// * `api_token` - An `Option` containing the API token, if required by the provider.
+    /// * `language` - The language to request weather *descriptions* in --
+    ///   see `Language`'s docs.
     ///
     /// # Errors
     /// Returns an error `String` if a required API token is missing for the selected provider.
     pub fn create_provider(
         provider_type: &WeatherApiProvider,
         api_token: Option<String>,
+        language: Language,
     ) -> Result<Box<dyn WeatherProvider + Send + Sync>, String> {
         match provider_type {
             WeatherApiProvider::OpenWeather => {
                 let token = api_token.ok_or("OpenWeather API requires an API token")?;
                 Ok(Box::new(super::openweather_api::OpenWeatherProvider::new(
-                    token,
+                    token, language,
                 )))
             }
             WeatherApiProvider::GoogleWeather => {
                 let token = api_token.ok_or("Google Weather API requires an API token")?;
                 Ok(Box::new(
-                    super::google_weather_api::GoogleWeatherProvider::new(token),
+                    super::google_weather_api::GoogleWeatherProvider::new(token, language),
                 ))
             }
         }

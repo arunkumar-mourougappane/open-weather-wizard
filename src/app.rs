@@ -210,7 +210,8 @@ fn fetch_weather_task(config: &AppConfig) -> Task<Message> {
     Task::perform(
         async move {
             let token = config.get_api_token().ok();
-            let provider = WeatherProviderFactory::create_provider(&provider_type, token)?;
+            let provider =
+                WeatherProviderFactory::create_provider(&provider_type, token, config.language)?;
             provider
                 .get_weather(&location)
                 .await
@@ -231,7 +232,8 @@ fn fetch_forecast_task(config: &AppConfig) -> Task<Message> {
     Task::perform(
         async move {
             let token = config.get_api_token().ok();
-            let provider = WeatherProviderFactory::create_provider(&provider_type, token)?;
+            let provider =
+                WeatherProviderFactory::create_provider(&provider_type, token, config.language)?;
             provider
                 .get_forecast(&location)
                 .await
@@ -250,7 +252,8 @@ fn fetch_alerts_task(config: &AppConfig) -> Task<Message> {
     Task::perform(
         async move {
             let token = config.get_api_token().ok();
-            let provider = WeatherProviderFactory::create_provider(&provider_type, token)?;
+            let provider =
+                WeatherProviderFactory::create_provider(&provider_type, token, config.language)?;
             provider
                 .get_alerts(&location)
                 .await
@@ -695,10 +698,12 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 state: prefs_state.state_input.clone(),
                 country: prefs_state.country_input.clone(),
             };
+            let language = prefs_state.language;
 
             Task::perform(
                 async move {
-                    let provider = WeatherProviderFactory::create_provider(&provider_type, token)?;
+                    let provider =
+                        WeatherProviderFactory::create_provider(&provider_type, token, language)?;
                     provider
                         .get_weather(&location)
                         .await

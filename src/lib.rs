@@ -23,7 +23,7 @@ pub mod weather_api;
 #[cfg(test)]
 mod tests {
     use crate::config::{
-        AppConfig, ConfigManager, LocationConfig, ThemePreference, WeatherApiProvider,
+        AppConfig, ConfigManager, Language, LocationConfig, ThemePreference, WeatherApiProvider,
     };
     use crate::weather_api::weather_provider::WeatherProviderFactory;
 
@@ -78,6 +78,7 @@ mod tests {
         config.refresh_interval_secs = Some(900);
         config.launch_at_login = true;
         config.theme_preference = ThemePreference::Dark;
+        config.language = Language::Spanish;
 
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("GoogleWeather"));
@@ -86,6 +87,7 @@ mod tests {
         assert!(json.contains("900"));
         assert!(json.contains("launch_at_login"));
         assert!(json.contains("theme_preference"));
+        assert!(json.contains("\"language\":\"Spanish\""));
         assert!(!json.contains("dark_mode"));
         assert!(!json.contains("api_token"));
 
@@ -94,11 +96,13 @@ mod tests {
         assert_eq!(deserialized.refresh_interval_secs, Some(900));
         assert!(deserialized.launch_at_login);
         assert_eq!(deserialized.theme_preference, ThemePreference::Dark);
+        assert_eq!(deserialized.language, Language::Spanish);
 
         // Test migration-safe default where refresh_interval_secs and
         // launch_at_login are missing, and theme_preference has never been
         // written (no "dark_mode" key at all either) -- should default to
-        // System, not fall back to Light.
+        // System, not fall back to Light. language should default to
+        // English, matching both providers' own API default.
         let missing_interval_json = r#"{"weather_provider":"OpenWeather","location":{"city":"Peoria","state":"IL","country":"US"},"use_fahrenheit":false}"#;
         let deserialized_default: AppConfig = serde_json::from_str(missing_interval_json).unwrap();
         assert_eq!(deserialized_default.refresh_interval_secs, None);
@@ -107,6 +111,48 @@ mod tests {
             deserialized_default.theme_preference,
             ThemePreference::System
         );
+        assert_eq!(deserialized_default.language, Language::English);
+    }
+
+    /// Verifies the one deliberate divergence between the two providers'
+    /// language codes: OpenWeatherMap's `lang` parameter uses its own `"kr"`
+    /// for Korean rather than ISO 639-1/BCP-47's `"ko"`, which Google
+    /// Weather's `languageCode` does use. Every other curated language
+    /// shares an identical code across both providers -- a regression here
+    /// (e.g. someone "simplifying" the two match arms into one) would
+    /// silently request the wrong provider's descriptions in the wrong
+    /// language for Korean users specifically, with no error to surface it.
+    #[test]
+    fn test_language_codes_diverge_only_for_korean() {
+        use crate::config::Language;
+
+        let all = [
+            Language::English,
+            Language::Spanish,
+            Language::French,
+            Language::German,
+            Language::Italian,
+            Language::Portuguese,
+            Language::Russian,
+            Language::Japanese,
+            Language::Korean,
+            Language::Arabic,
+            Language::Hindi,
+            Language::Dutch,
+        ];
+
+        for language in all {
+            if language == Language::Korean {
+                assert_eq!(language.openweather_code(), "kr");
+                assert_eq!(language.google_code(), "ko");
+            } else {
+                assert_eq!(
+                    language.openweather_code(),
+                    language.google_code(),
+                    "{language} should share the same code across both providers"
+                );
+            }
+        }
     }
 
     /// Verifies that the refresh interval validation logic enforces the
@@ -265,22 +311,30 @@ mod tests {
         let result = WeatherProviderFactory::create_provider(
             &WeatherApiProvider::OpenWeather,
             Some("test_key".to_string()),
+            Language::English,
         );
         assert!(result.is_ok());
 
         // Test missing API key for OpenWeather
-        let result =
-            WeatherProviderFactory::create_provider(&WeatherApiProvider::OpenWeather, None);
+        let result = WeatherProviderFactory::create_provider(
+            &WeatherApiProvider::OpenWeather,
+            None,
+            Language::English,
+        );
         assert!(result.is_err());
 
         // Google Weather now requires a real API token, same as OpenWeather.
-        let result =
-            WeatherProviderFactory::create_provider(&WeatherApiProvider::GoogleWeather, None);
+        let result = WeatherProviderFactory::create_provider(
+            &WeatherApiProvider::GoogleWeather,
+            None,
+            Language::English,
+        );
         assert!(result.is_err());
 
         let result = WeatherProviderFactory::create_provider(
             &WeatherApiProvider::GoogleWeather,
             Some("test_key".to_string()),
+            Language::English,
         );
         assert!(result.is_ok());
     }

@@ -11,7 +11,7 @@
 //! ```sh
 //! GOOGLE_WEATHER_API_KEY=your-key-here cargo run --example google_weather_test
 //! ```
-use open_weather_wizard::config::{LocationConfig, WeatherApiProvider};
+use open_weather_wizard::config::{Language, LocationConfig, WeatherApiProvider};
 use open_weather_wizard::weather_api::weather_provider::WeatherProviderFactory;
 
 #[tokio::main]
@@ -42,8 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &api_key[..8.min(api_key.len())]
     );
 
-    let provider =
-        WeatherProviderFactory::create_provider(&WeatherApiProvider::GoogleWeather, Some(api_key))?;
+    let provider = WeatherProviderFactory::create_provider(
+        &WeatherApiProvider::GoogleWeather,
+        Some(api_key),
+        Language::English,
+    )?;
 
     match provider.get_weather(&location).await {
         Ok(weather_data) => {

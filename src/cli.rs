@@ -128,11 +128,13 @@ fn run_inner(cli: &Cli) -> Result<(), String> {
         .filter(|t| !t.is_empty())
         .or_else(|| config.get_api_token().ok().filter(|t| !t.is_empty()));
 
-    let provider = WeatherProviderFactory::create_provider(&provider_type, token).map_err(|e| {
-        format!(
-            "{e} (set {TOKEN_ENV_VAR} or configure a token via the GUI's Preferences window first)"
-        )
-    })?;
+    let provider =
+        WeatherProviderFactory::create_provider(&provider_type, token, config.language)
+            .map_err(|e| {
+                format!(
+                    "{e} (set {TOKEN_ENV_VAR} or configure a token via the GUI's Preferences window first)"
+                )
+            })?;
 
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|e| format!("Failed to start async runtime: {e}"))?;
