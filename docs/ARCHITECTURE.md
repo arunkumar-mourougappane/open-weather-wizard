@@ -232,7 +232,7 @@ both problems:
 `examples/tray_spike.rs` is the throwaway spike that proved this actually
 works against this project's real `iced = "0.14"` (the crate's own bundled
 example only declares `iced = "0.13"`) before adopting it for real in
-`src/app.rs` (`build_tray_icon`, `sync_tray_tooltip`) -- same
+`src/app.rs` (`build_tray_icon`, `sync_tray_display`) -- same
 prove-it-before-committing approach as `examples/lottie_spike.rs` for the
 GPU-shared Lottie rendering above. Verified manually on macOS only (icon
 renders using the real embedded app icon, tooltip reflects live weather,
@@ -253,14 +253,20 @@ is_some()`, falling back to actually quitting if the tray icon failed to
 create -- with no tray, there'd be no way to ever get the window back
 otherwise.
 
-Left-clicking the tray icon un-minimizes and focuses the window back
-(`window::minimize(id, false)` before `window::gain_focus(id)` -- the latter
-alone is documented as a no-op on a minimized/not-visible window, which is
-exactly the state a click is trying to recover from). The `tray` crate has
-no context-menu API (only icon/tooltip/click events), so **right-clicking
-the tray icon is the only remaining way to quit** once closing the window no
-longer does -- what a menu's "Quit" item would have done anyway, absent an
-actual menu to put it in.
+Left-clicking the tray icon brings the main window back via
+`bring_window_to_front` (also used by the `OpenPreferences`/`OpenAbout`
+handlers, to recover an already-open window that's hidden or minimized
+rather than silently doing nothing). It queries `window::is_minimized(id)`
+first and only issues one action: `window::minimize(id, false)` if actually
+minimized, or `window::gain_focus(id)` otherwise -- `winit`'s
+`focus_window()` on macOS checks `isMiniaturized()` and no-ops if true, and
+`deminiaturize()` is animated/asynchronous, so batching both actions in the
+same `Task::batch` races and silently fails almost every time; querying
+first and issuing only the relevant one avoids the race entirely. The
+`tray` crate has no context-menu API (only icon/tooltip/click events), so
+**right-clicking the tray icon is the only remaining way to quit** once
+closing the window no longer does -- what a menu's "Quit" item would have
+done anyway, absent an actual menu to put it in.
 
 A separate, unrelated fix bundled with this work: `winit::window::Window::
 set_window_icon` (what `iced::window::Settings::icon` maps to) is documented
@@ -271,6 +277,63 @@ and sets it directly via `NSApplication.setApplicationIconImage` (`objc2`,
 consistent with this project's other macOS-native code), called once early
 in `boot()`. Packaged release builds are unaffected either way -- they
 already got their Dock icon from `packaging/macos/Info.plist`'s `.icns`.
+
+Also note that `window::Settings::exit_on_close_request` defaults to
+`true`, which makes `iced_winit` destroy a window the instant
+`WindowEvent::CloseRequested` fires, bypassing `WindowCloseRequested`'s
+handler entirely regardless of what it decides to do. The main window's
+`Settings` in `boot()` sets it to `false` so the app can actually intercept
+the close and choose to minimize instead.
+
+### Follow-up polish (icon variants, title text, alert badge)
+
+Four incremental improvements landed after the initial feature, each its
+own commit:
+
+1. **Template icon.** `build_tray_icon` sets `.with_icon_as_template(true)`
+   so macOS renders the icon as a monochrome template image that adapts to
+   light/dark menu bars, matching the system's own status icons. Later,
+   testing phase 3 (below) surfaced that `TrayIcon::set_icon()` (the
+   `tray` crate's macOS implementation) hardcodes the template flag to
+   `false` internally, silently discarding this setting the first time the
+   icon image changes -- fixed by calling `set_icon_with_as_template(icon,
+   true)` instead wherever the icon is updated after creation. That method
+   is a documented no-op on non-macOS platforms, so it's only used there,
+   gated `#[cfg(target_os = "macos")]`/`#[cfg(not(target_os = "macos"))]`.
+2. **Compact title text.** `tray_title_text` renders the current
+   temperature ("68°F") via `TrayIcon::set_title` (macOS-only), so the
+   number is visible without hovering for the tooltip. `None` while
+   loading or after a fetch error, so there's no blank/stale text next to
+   the icon when there's nothing useful to say.
+3. **Per-condition icon.** `tray_icon_symbol` maps the current
+   `WeatherStatus` to a `WeatherSymbol`, and `icons::tray_icon_for` loads a
+   pre-rendered 64x64 PNG for it from `assets/tray/`. Those PNGs are
+   generated offline by `examples/generate_tray_icons.rs` (a dev-only
+   tool, excluded from the published crate like the other `examples/*_
+   spike.rs` files) by rasterizing the same `assets/static/*.svg` files
+   the main window already uses via `usvg`/`resvg`/`tiny-skia` -- kept as
+   dev-dependencies only, so the shipped binary never links an SVG
+   rasterizer just to redraw a tray icon that only changes when the
+   weather condition does. `icons::tray_asset_path` derives each PNG's
+   path directly from the existing SVG mapping (stripping `static/`/`.svg`
+   for `tray/`/`.png`) instead of a second hand-kept symbol table, so the
+   two can't silently drift apart.
+4. **Severe alert badge.** `has_severe_alert` checks `state.alerts` for the
+   same `Severe`/`Extreme` threshold `ui/main_screen.rs::alerts_view`
+   already uses for its own danger styling. When true, `tray_tooltip_text`
+   and `tray_title_text` both gain a `⚠` prefix, so an active severe alert
+   is visible without opening the app -- including while the title would
+   otherwise show nothing (loading/error), since that's exactly when a
+   user might have no other reason to notice. `sync_tray_display` is
+   called from the `AlertsFetched(Ok(_))` handler too (not just weather
+   fetches), so the badge appears as soon as alerts arrive rather than
+   waiting for the next weather refresh.
+
+All four are pure, unit-tested functions (`tray_tooltip_text`,
+`tray_title_text`, `tray_icon_symbol`, `has_severe_alert`) separate from
+`sync_tray_display`'s actual OS-level side effects, consistent with this
+project's general pattern of keeping side-effecting glue thin and
+everything else independently testable.
 
 ## CI / build
 
