@@ -12,6 +12,7 @@ accumulating here.
 
 **Interface**
 
+- Active weather alerts (severe thunderstorm, flood, etc.) now surface as a banner above the current-conditions card when using the Google Weather provider, fetched via `publicAlerts:lookup` on the same refresh cycle as current conditions. OpenWeatherMap has no free-tier alerts equivalent, so it always shows none. (#45)
 - The auto-refresh interval is now user-configurable in Preferences (presets: 30s / 1m / 5m / 15m / 30m). To protect Google Maps Platform rate limits, a 15-minute floor is strictly enforced when using the Google Weather provider. (#44)
 - Preferences now has a "Verify API" button next to the API Token field:
   fires a single live request against the currently-typed

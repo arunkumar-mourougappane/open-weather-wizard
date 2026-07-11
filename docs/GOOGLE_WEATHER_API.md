@@ -190,9 +190,11 @@ would need its own mapping since the day/night split has no equivalent in
   is the relevant model for a single desktop app.
 - The auto-refresh interval is user-configurable (defaults to 15 minutes for Google Weather,
   with a hardcoded floor of 15 minutes enforced in preferences validation and subscription tick setup).
-  At 15 minutes, a single always-running instance generates 3 billable calls per refresh (current conditions + 2 forecast pages),
-  totaling ~8,640 calls/month, which stays safely within the 10,000 free monthly calls. Lowering the refresh interval below
-  15 minutes is disallowed for Google Weather to protect the free tier budget.
+  At 15 minutes, a single always-running instance generates 4 billable calls per refresh (current
+  conditions + 2 forecast pages + `publicAlerts:lookup`), totaling ~11,520 calls/month, which
+  exceeds the 10,000 free monthly calls on its own for an always-open instance -- worth revisiting
+  the default/floor or the alerts fetch cadence before this ships broadly. Lowering the refresh
+  interval below 15 minutes is disallowed for Google Weather to protect the free tier budget.
 
 ## What's not covered by the current mock
 
