@@ -164,9 +164,10 @@ impl State {
         }
     }
 
-    /// Writes the edited fields back into the shared `AppConfig`. Only
-    /// `set_api_token` (an OS keychain write) can actually fail -- everything
-    /// else here is an in-memory field assignment.
+    /// Writes the edited fields back into the shared `AppConfig`. Two steps
+    /// can fail: `set_api_token` (an OS keychain write) and
+    /// `update_auto_launch` (an OS-level login-item registration) --
+    /// everything else here is an in-memory field assignment.
     pub fn apply_to(&self, config: &mut AppConfig) -> Result<(), String> {
         config.weather_provider = self.provider.clone();
         if !self.token_input.is_empty() {
@@ -179,7 +180,9 @@ impl State {
         config.use_fahrenheit = self.use_fahrenheit;
         config.launch_at_login = self.launch_at_login;
         config.refresh_interval_secs = Some(self.refresh_interval.to_secs());
-        config.update_auto_launch().map_err(|e| format!("Failed to configure auto-launch: {}", e))?;
+        config
+            .update_auto_launch()
+            .map_err(|e| format!("Failed to configure auto-launch: {}", e))?;
         Ok(())
     }
 

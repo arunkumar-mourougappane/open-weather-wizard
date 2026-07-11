@@ -74,22 +74,27 @@ mod tests {
             country: "TC".to_string(),
         };
         config.refresh_interval_secs = Some(900);
+        config.launch_at_login = true;
 
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("GoogleWeather"));
         assert!(json.contains("Test City"));
         assert!(json.contains("refresh_interval_secs"));
         assert!(json.contains("900"));
+        assert!(json.contains("launch_at_login"));
         assert!(!json.contains("api_token"));
 
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.location.city, "Test City");
         assert_eq!(deserialized.refresh_interval_secs, Some(900));
+        assert!(deserialized.launch_at_login);
 
-        // Test migration-safe default where refresh_interval_secs is missing.
+        // Test migration-safe default where refresh_interval_secs and
+        // launch_at_login are missing.
         let missing_interval_json = r#"{"weather_provider":"OpenWeather","location":{"city":"Peoria","state":"IL","country":"US"},"dark_mode":false,"use_fahrenheit":false}"#;
         let deserialized_default: AppConfig = serde_json::from_str(missing_interval_json).unwrap();
         assert_eq!(deserialized_default.refresh_interval_secs, None);
+        assert!(!deserialized_default.launch_at_login);
     }
 
     /// Verifies that the refresh interval validation logic enforces the

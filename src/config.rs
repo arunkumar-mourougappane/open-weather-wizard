@@ -171,7 +171,7 @@ impl AppConfig {
     /// Applies the `launch_at_login` preference to the OS.
     pub fn update_auto_launch(&self) -> Result<(), String> {
         let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        
+
         let auto = auto_launch::AutoLaunchBuilder::new()
             .set_app_name("open-weather-wizard")
             .set_app_path(&current_exe.to_string_lossy())
@@ -182,9 +182,9 @@ impl AppConfig {
         if self.launch_at_login {
             auto.enable().map_err(|e| e.to_string())?;
         } else {
-            let _ = auto.disable();
+            auto.disable().map_err(|e| e.to_string())?;
         }
-        
+
         Ok(())
     }
 }
