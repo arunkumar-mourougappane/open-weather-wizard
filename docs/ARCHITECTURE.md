@@ -202,6 +202,52 @@ macOS release needs an `NSLocationWhenInUseUsageDescription` key to ever
 show the location permission prompt (a plain `cargo run` dev binary never
 will, regardless).
 
+## Tray/menu bar icon
+
+A persistent tray/menu bar icon (issue #56) sits alongside the existing
+window-based app rather than replacing it -- this app never runs without its
+main window existing, the icon is just an additional at-a-glance presence.
+
+The obvious crate, [`tray-icon`](https://docs.rs/tray-icon) (used by Tauri),
+raised the same conflict that drove the GTK4 → iced rewrite above: its Linux
+backend needs `gtk3`/`libappindicator`, and its recommended integration
+pattern pushes events through a `winit::event_loop::EventLoopProxy` -- which
+`iced` doesn't expose, since it wraps `winit`'s event loop internally rather
+than handing the app a reference to it.
+
+The [`tray`](https://crates.io/crates/tray) crate (nobane/tray-rs) sidesteps
+both problems:
+
+- **No GTK on Linux.** Its system tray implementation is raw X11 (`x11rb`),
+  not GTK -- consistent with this project's general "D-Bus/raw-protocol over
+  GTK" preference (see `src/geolocation.rs`'s GeoClue2 D-Bus client). Caveat:
+  this means a pure-Wayland session with no XWayland has no tray to draw
+  into at all, since there's no GTK/StatusNotifierItem fallback either.
+- **No event loop access needed.** Instead of a push-based `EventLoopProxy`
+  integration, it exposes a polling API (`TrayIconEvent::receiver()`).
+  `src/app.rs`'s `Message::AnimationTick` handler (already firing every
+  `ANIMATION_TICK_INTERVAL`, 33ms, for the Lottie icons) drains it each tick
+  instead of a dedicated timer.
+
+`examples/tray_spike.rs` is the throwaway spike that proved this actually
+works against this project's real `iced = "0.14"` (the crate's own bundled
+example only declares `iced = "0.13"`) before adopting it for real in
+`src/app.rs` (`build_tray_icon`, `sync_tray_tooltip`) -- same
+prove-it-before-committing approach as `examples/lottie_spike.rs` for the
+GPU-shared Lottie rendering above. Verified manually on macOS only (icon
+renders using the real embedded app icon, tooltip reflects live weather,
+clicking it focuses the main window); Windows/Linux are unverified in this
+environment -- the crate's own per-platform modules (`windows.rs` via
+`Shell_NotifyIcon`, `linux.rs` via `x11rb`) have no `winit`/GTK dependency
+either way, so the same integration should hold, but treat that as
+unconfirmed until someone actually runs it there.
+
+The `tray` crate has no context-menu API (only icon/tooltip/click events),
+which is why this integration doesn't attempt "hide the main window to the
+tray and quit from a tray menu instead" -- without a menu item to quit from,
+that would strand users with no way to fully exit the app. The main window's
+close behavior is unchanged from before this feature.
+
 ## CI / build
 
 - `Cargo.toml`: `gtk4`/`glib`/`gio`/`gdk-pixbuf` replaced with `iced` (features

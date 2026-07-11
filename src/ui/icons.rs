@@ -110,6 +110,17 @@ pub fn load_window_icon(asset_path: &str) -> Option<iced::window::Icon> {
     iced::window::icon::from_rgba(rgba.into_raw(), width, height).ok()
 }
 
+/// Loads an embedded PNG asset as a `tray::Icon`, for the persistent tray/
+/// menu bar icon (issue #56). Same embedded-asset source as
+/// `load_window_icon` -- a packaged/installed binary has no `assets/`
+/// directory alongside it to read from a filesystem path at runtime.
+pub fn load_tray_icon(asset_path: &str) -> Option<tray::Icon> {
+    let file = WeatherIconsAsset::get(asset_path)?;
+    let rgba = image::load_from_memory(file.data.as_ref()).ok()?.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    tray::Icon::from_rgba(rgba.into_raw(), width, height).ok()
+}
+
 /// Maps every `WeatherSymbol` to its hand-authored `assets/lottie/*.json`
 /// animation. Conditions that don't have a visually distinct animation of
 /// their own share the closest match (e.g. Mist/Smoke/Fog all drift the same

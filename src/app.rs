@@ -19,11 +19,12 @@ use crate::ui::temperature::{
     celsius_to_display, compass_direction, distance_to_display, distance_unit, format_local_time,
     pressure_to_display, pressure_unit, speed_to_display, speed_unit, unit_symbol,
 };
-use crate::ui::{about, main_screen, preferences, transition};
+use crate::ui::{about, icons, main_screen, preferences, transition};
 use crate::weather_api::alerts::WeatherAlert;
 use crate::weather_api::forecast::ForecastResponse;
 use crate::weather_api::openweather_api::ApiResponse;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
+use tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 pub const DEFAULT_WINDOW_WIDTH: f32 = 720.0;
 /// Tall enough that the toolbar + current-conditions panel (icon, location,
@@ -147,6 +148,15 @@ pub struct AppState {
     /// window's Save/Cancel resolves it (see `update`) so later manual
     /// reopens via the toolbar never show first-run copy.
     is_first_run: bool,
+    /// The persistent tray/menu bar icon (issue #56) -- `None` if creation
+    /// failed (logged as a warning in `boot()`), so a platform hiccup here
+    /// degrades to "no tray icon" rather than crashing the whole app.
+    /// Kept alive for the app's lifetime purely by staying a field here --
+    /// the underlying OS resource is torn down when this drops, so nothing
+    /// ever reads it back out, just holds onto it and refreshes its
+    /// tooltip. See `sync_tray_tooltip` and `Message::AnimationTick`'s
+    /// handler (which drains `TrayIconEvent::receiver()`).
+    tray_icon: Option<TrayIcon>,
 }
 
 #[derive(Debug, Clone)]
@@ -325,6 +335,7 @@ fn discard_stale_location_data(state: &mut AppState) {
     state.alerts = vec![];
     state.selected_forecast_day = None;
     state.last_updated = None;
+    sync_tray_tooltip(state);
 }
 
 /// Records the freshly-formatted display value for each cross-faded
@@ -412,6 +423,64 @@ fn preferences_window_settings() -> window::Settings {
 /// unset API token (see `docs`/issue #38 for why: `WeatherProviderFactory`
 /// requires a token for every provider now, and the default config has
 /// none).
+/// Builds the persistent tray/menu bar icon (issue #56). Returns `None`
+/// (logging a warning) rather than propagating an error -- a platform
+/// hiccup creating this should degrade to "no tray icon" for this launch,
+/// not crash the whole app. See `examples/tray_spike.rs` for the spike that
+/// proved this integration against this project's actual iced version.
+fn build_tray_icon() -> Option<TrayIcon> {
+    let icon = icons::load_tray_icon("icon/iconset/icon-32.png")?;
+    match TrayIconBuilder::new()
+        .with_tooltip("Weather Wizard")
+        .with_icon(icon)
+        .build()
+    {
+        Ok(tray_icon) => Some(tray_icon),
+        Err(e) => {
+            log::warn!("Failed to create tray icon: {e}");
+            None
+        }
+    }
+}
+
+/// Refreshes the tray icon's tooltip from `state.weather`/
+/// `state.config.use_fahrenheit` -- called wherever either one changes:
+/// `WeatherFetched`, `discard_stale_location_data` (a location switch or a
+/// Preferences Save that changed the current location), and Preferences
+/// Save generally (`use_fahrenheit` might have changed with no location
+/// change at all).
+/// Builds the tray icon's tooltip text from the current weather status --
+/// a pure function (unlike `sync_tray_tooltip`, which also has to reach
+/// into `state.tray_icon` and make the actual OS call) purely so the text
+/// itself is unit-testable without needing a real `TrayIcon`.
+fn tray_tooltip_text(weather: &WeatherStatus, use_fahrenheit: bool) -> String {
+    match weather {
+        WeatherStatus::Loaded(response) | WeatherStatus::Refreshing(response) => {
+            match response.weather.first() {
+                Some(condition) => format!(
+                    "Weather Wizard — {:.0}{} {}",
+                    celsius_to_display(response.main.temp, use_fahrenheit),
+                    unit_symbol(use_fahrenheit),
+                    condition.description
+                ),
+                None => "Weather Wizard".to_string(),
+            }
+        }
+        WeatherStatus::Loading => "Weather Wizard — Loading…".to_string(),
+        WeatherStatus::Error(_) => "Weather Wizard — couldn't fetch weather".to_string(),
+    }
+}
+
+fn sync_tray_tooltip(state: &AppState) {
+    let Some(tray_icon) = &state.tray_icon else {
+        return;
+    };
+    let tooltip = tray_tooltip_text(&state.weather, state.config.use_fahrenheit);
+    if let Err(e) = tray_icon.set_tooltip(Some(tooltip)) {
+        log::warn!("Failed to update tray icon tooltip: {e}");
+    }
+}
+
 pub fn boot() -> (AppState, Task<Message>) {
     let config_manager = ConfigManager::new().expect("Failed to create config manager");
     let is_first_run = !config_manager.config_exists();
@@ -460,6 +529,7 @@ pub fn boot() -> (AppState, Task<Message>) {
         is_first_run,
         config,
         config_manager,
+        tray_icon: build_tray_icon(),
     };
 
     (
@@ -525,6 +595,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             );
             state.weather = WeatherStatus::Loaded(response);
             state.last_updated = Some(Instant::now());
+            sync_tray_tooltip(state);
             Task::none()
         }
         Message::WeatherFetched(Err(error)) => {
@@ -538,6 +609,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 _ => WeatherStatus::Error(error),
             };
+            sync_tray_tooltip(state);
             Task::none()
         }
         Message::ForecastFetched(Ok(response)) => {
@@ -609,7 +681,25 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             state.about_window = Some(id);
             open_task.discard()
         }
-        Message::AnimationTick => Task::none(),
+        Message::AnimationTick => {
+            // Piggybacks on the animation timer to drain the tray icon's
+            // event channel, rather than adding a second timer just for
+            // this -- see `build_tray_icon`'s docs and
+            // `examples/tray_spike.rs` for why a polling receiver (as
+            // opposed to a push-based `winit::event_loop::EventLoopProxy`
+            // integration) works here at all.
+            while let Ok(event) = TrayIconEvent::receiver().try_recv() {
+                if let TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } = event
+                {
+                    return window::gain_focus(state.main_window);
+                }
+            }
+            Task::none()
+        }
         Message::ForecastDaySelected(index) => {
             state.selected_forecast_day =
                 if index == 0 || state.selected_forecast_day == Some(index) {
@@ -670,6 +760,11 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             if state.config.current_location() != previous_location {
                 discard_stale_location_data(state);
             }
+            // Independent of location: `use_fahrenheit` might have just
+            // changed with no location change at all, and the tooltip
+            // needs to reflect that too. A harmless no-op re-sync in the
+            // branch above, which already called this.
+            sync_tray_tooltip(state);
             // Whatever brought up first-run setup is now resolved -- a
             // later manual reopen (toolbar gear icon) should show the
             // ordinary "Preferences" copy, not the welcome banner again.
@@ -930,6 +1025,9 @@ mod tests {
                 prefs_state: None,
                 about_window: None,
                 is_first_run: false,
+                // Deliberately `None` -- tests shouldn't create a real OS
+                // tray icon, and `sync_tray_tooltip` is a no-op without one.
+                tray_icon: None,
             },
             path,
         )
@@ -1295,6 +1393,50 @@ mod tests {
             "Cancel must not write the draft's edits back into AppConfig"
         );
 
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_tray_tooltip_text_reflects_weather_status_and_units() {
+        assert_eq!(
+            tray_tooltip_text(&WeatherStatus::Loading, false),
+            "Weather Wizard — Loading…"
+        );
+        assert_eq!(
+            tray_tooltip_text(&WeatherStatus::Error("boom".to_string()), false),
+            "Weather Wizard — couldn't fetch weather"
+        );
+
+        let weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        assert_eq!(
+            tray_tooltip_text(&weather, false),
+            "Weather Wizard — 20°C clear sky"
+        );
+        assert_eq!(
+            tray_tooltip_text(&weather, true),
+            "Weather Wizard — 68°F clear sky"
+        );
+
+        // `Refreshing` (last-known-good data mid-fetch) reads the same as
+        // `Loaded` -- the tooltip shouldn't flicker to "Loading…" on every
+        // background refresh.
+        let mut refreshing_data = sample_weather("Peoria");
+        refreshing_data.main.temp = 20.0;
+        assert_eq!(
+            tray_tooltip_text(&WeatherStatus::Refreshing(refreshing_data), false),
+            "Weather Wizard — 20°C clear sky"
+        );
+    }
+
+    #[test]
+    fn test_sync_tray_tooltip_is_a_no_op_without_a_tray_icon() {
+        // No real assertion beyond "doesn't panic" -- `test_state` always
+        // sets `tray_icon: None`, so this exercises the early-return path
+        // that every other test in this module already relies on
+        // implicitly every time `sync_tray_tooltip` runs inside `update()`.
+        let (mut state, path) = test_state(AppConfig::default());
+        state.weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        sync_tray_tooltip(&state);
         let _ = std::fs::remove_file(&path);
     }
 
