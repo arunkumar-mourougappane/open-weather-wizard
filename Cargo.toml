@@ -10,9 +10,9 @@ readme = "README.md"
 license = "MIT"
 keywords = ["weather", "gui", "iced", "desktop", "forecast"]
 categories = ["gui"]
-# examples/lottie_spike.rs is a throwaway prototype (see its own doc
-# comment), not a usage example.
-exclude = ["examples/lottie_spike.rs"]
+# examples/lottie_spike.rs and examples/tray_spike.rs are throwaway
+# prototypes (see their own doc comments), not usage examples.
+exclude = ["examples/lottie_spike.rs", "examples/tray_spike.rs"]
 
 [dependencies]
 env_logger = "0.11.8"
@@ -36,6 +36,16 @@ jiff = "0.2.31"
 clap = { version = "4.6.1", features = ["derive"] }
 auto-launch = "0.6.0"
 dark-light = "2.0.0"
+# Persistent tray/menu bar icon (issue #56). Uses a polling API
+# (`TrayIconEvent::receiver()`) rather than push events through a
+# `winit::event_loop::EventLoopProxy`, so it doesn't need access to iced's
+# internal event loop -- see `examples/tray_spike.rs` for the spike that
+# proved this against this project's actual iced version before adopting
+# it for real. Linux support is native X11 (`x11rb`), not GTK, avoiding the
+# GTK-vs-iced conflict `docs/ARCHITECTURE.md` documents for the GTK4
+# rewrite; macOS uses `objc2-app-kit` (`NSStatusItem`), consistent with
+# this project's other objc2-based macOS code (`src/geolocation.rs`).
+tray = "0.1.2"
 
 [[bin]]
 name = "open-weather-wizard"
