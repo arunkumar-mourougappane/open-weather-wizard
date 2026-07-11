@@ -154,7 +154,7 @@ pub struct AppState {
     /// Kept alive for the app's lifetime purely by staying a field here --
     /// the underlying OS resource is torn down when this drops, so nothing
     /// ever reads it back out, just holds onto it and refreshes its
-    /// tooltip. See `sync_tray_tooltip` and `Message::AnimationTick`'s
+    /// tooltip. See `sync_tray_display` and `Message::AnimationTick`'s
     /// handler (which drains `TrayIconEvent::receiver()`).
     tray_icon: Option<TrayIcon>,
 }
@@ -320,6 +320,31 @@ fn fetch_api_token_task(config: &AppConfig) -> Task<Message> {
     )
 }
 
+/// Restores an existing window to the foreground -- un-minimizing it first
+/// if necessary. `gain_focus` alone documents itself as a no-op if the
+/// window is minimized, which is exactly the state a user re-clicking a
+/// toolbar button (Preferences, About) or the tray icon for an
+/// already-open window is most likely trying to recover from. Naively
+/// batching `minimize(id, false)` and `gain_focus(id)` together doesn't
+/// work either: winit's own `focus_window` (what `gain_focus` calls on
+/// macOS) checks `isMiniaturized()` and no-ops if still true, and
+/// `deminiaturize`'s un-minimize animation hasn't necessarily finished by
+/// the time both actions dispatch in the same tick, so `gain_focus` would
+/// silently do nothing almost every time. Querying the actual state first
+/// and issuing only the one relevant action avoids the race outright:
+/// un-minimizing alone already restores focus (same as clicking a
+/// minimized window's Dock icon), so `gain_focus` is only needed when the
+/// window was merely unfocused (behind other windows), never minimized.
+fn bring_window_to_front(id: window::Id) -> Task<Message> {
+    window::is_minimized(id).then(move |minimized| {
+        if minimized == Some(true) {
+            window::minimize(id, false)
+        } else {
+            window::gain_focus(id)
+        }
+    })
+}
+
 /// Drops any last-known-good weather/forecast/alerts data rather than
 /// letting it carry forward through the next fetch's `Refreshing` state --
 /// for use whenever what's about to be fetched is for a *different place*
@@ -335,7 +360,7 @@ fn discard_stale_location_data(state: &mut AppState) {
     state.alerts = vec![];
     state.selected_forecast_day = None;
     state.last_updated = None;
-    sync_tray_tooltip(state);
+    sync_tray_display(state);
 }
 
 /// Records the freshly-formatted display value for each cross-faded
@@ -423,15 +448,17 @@ fn preferences_window_settings() -> window::Settings {
 /// unset API token (see `docs`/issue #38 for why: `WeatherProviderFactory`
 /// requires a token for every provider now, and the default config has
 /// none).
-/// Builds the persistent tray/menu bar icon (issue #56). Returns `None`
-/// (logging a warning) rather than propagating an error -- a platform
-/// hiccup creating this should degrade to "no tray icon" for this launch,
-/// not crash the whole app. See `examples/tray_spike.rs` for the spike that
-/// proved this integration against this project's actual iced version.
 fn build_tray_icon() -> Option<TrayIcon> {
     let icon = icons::load_tray_icon("icon/iconset/icon-32.png")?;
     match TrayIconBuilder::new()
         .with_tooltip("Weather Wizard")
+        // A "template" image lets macOS recolor it to match the current
+        // menu bar appearance (light/dark), the same way every other
+        // monochrome menu bar glyph behaves -- without this, our icon
+        // stays a fixed color regardless of the system's appearance, which
+        // can read as low-contrast or just visually inconsistent with
+        // everything else up there. No effect on Windows/Linux.
+        .with_icon_as_template(true)
         .with_icon(icon)
         .build()
     {
@@ -443,14 +470,8 @@ fn build_tray_icon() -> Option<TrayIcon> {
     }
 }
 
-/// Refreshes the tray icon's tooltip from `state.weather`/
-/// `state.config.use_fahrenheit` -- called wherever either one changes:
-/// `WeatherFetched`, `discard_stale_location_data` (a location switch or a
-/// Preferences Save that changed the current location), and Preferences
-/// Save generally (`use_fahrenheit` might have changed with no location
-/// change at all).
 /// Builds the tray icon's tooltip text from the current weather status --
-/// a pure function (unlike `sync_tray_tooltip`, which also has to reach
+/// a pure function (unlike `sync_tray_display`, which also has to reach
 /// into `state.tray_icon` and make the actual OS call) purely so the text
 /// itself is unit-testable without needing a real `TrayIcon`.
 fn tray_tooltip_text(weather: &WeatherStatus, use_fahrenheit: bool) -> String {
@@ -471,7 +492,30 @@ fn tray_tooltip_text(weather: &WeatherStatus, use_fahrenheit: bool) -> String {
     }
 }
 
-fn sync_tray_tooltip(state: &AppState) {
+/// Builds the short text shown next to the tray icon itself (macOS only,
+/// via `TrayIcon::set_title`) -- unlike the tooltip (a full sentence, only
+/// visible on hover), this is always on display, so it stays as compact as
+/// the system's own menu bar weather widget ("78°F"). `None` while loading
+/// or after a fetch error, rather than some placeholder text, so a blank
+/// title doesn't crowd the icon with nothing useful to say.
+fn tray_title_text(weather: &WeatherStatus, use_fahrenheit: bool) -> Option<String> {
+    match weather {
+        WeatherStatus::Loaded(response) | WeatherStatus::Refreshing(response) => Some(format!(
+            "{:.0}{}",
+            celsius_to_display(response.main.temp, use_fahrenheit),
+            unit_symbol(use_fahrenheit)
+        )),
+        WeatherStatus::Loading | WeatherStatus::Error(_) => None,
+    }
+}
+
+/// Refreshes the tray icon's title and tooltip from `state.weather`/
+/// `state.config.use_fahrenheit` -- called wherever either one changes:
+/// `WeatherFetched`, `discard_stale_location_data` (a location switch or a
+/// Preferences Save that changed the current location), and Preferences
+/// Save generally (`use_fahrenheit` might have changed with no location
+/// change at all).
+fn sync_tray_display(state: &AppState) {
     let Some(tray_icon) = &state.tray_icon else {
         return;
     };
@@ -479,6 +523,8 @@ fn sync_tray_tooltip(state: &AppState) {
     if let Err(e) = tray_icon.set_tooltip(Some(tooltip)) {
         log::warn!("Failed to update tray icon tooltip: {e}");
     }
+    let title = tray_title_text(&state.weather, state.config.use_fahrenheit);
+    tray_icon.set_title(title.as_deref());
 }
 
 pub fn boot() -> (AppState, Task<Message>) {
@@ -614,7 +660,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             );
             state.weather = WeatherStatus::Loaded(response);
             state.last_updated = Some(Instant::now());
-            sync_tray_tooltip(state);
+            sync_tray_display(state);
             Task::none()
         }
         Message::WeatherFetched(Err(error)) => {
@@ -628,7 +674,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 }
                 _ => WeatherStatus::Error(error),
             };
-            sync_tray_tooltip(state);
+            sync_tray_display(state);
             Task::none()
         }
         Message::ForecastFetched(Ok(response)) => {
@@ -676,8 +722,12 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::OpenPreferences => {
-            if state.prefs_window.is_some() {
-                return Task::none();
+            // Already open -- bring it back to front instead of silently
+            // doing nothing, in case it's minimized or just sitting behind
+            // other windows (same reasoning as the tray icon's left-click
+            // handler; see `bring_window_to_front`'s docs).
+            if let Some(id) = state.prefs_window {
+                return bring_window_to_front(id);
             }
             state.prefs_state = Some(preferences::State::from_config(&state.config));
             let (id, open_task) = window::open(preferences_window_settings());
@@ -685,8 +735,8 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             Task::batch([open_task.discard(), fetch_api_token_task(&state.config)])
         }
         Message::OpenAbout => {
-            if state.about_window.is_some() {
-                return Task::none();
+            if let Some(id) = state.about_window {
+                return bring_window_to_front(id);
             }
             const ABOUT_SIZE: Size = Size::new(420.0, 440.0);
             let (id, open_task) = window::open(window::Settings {
@@ -718,35 +768,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 };
                 match button {
                     MouseButton::Left => {
-                        // `gain_focus` alone documents itself as a no-op if
-                        // the window is minimized -- exactly the state a
-                        // user clicking the tray icon is most likely trying
-                        // to recover from (including a main window closed
-                        // via `WindowCloseRequested`, which now minimizes
-                        // rather than exits while a tray icon exists -- see
-                        // that handler). Naively batching `minimize(false)`
-                        // and `gain_focus` together doesn't work: winit's
-                        // own `focus_window` (what `gain_focus` calls on
-                        // macOS) checks `isMiniaturized()` and no-ops if
-                        // still true, and `deminiaturize`'s un-minimize
-                        // animation hasn't necessarily finished by the time
-                        // both actions are dispatched in the same tick, so
-                        // `gain_focus` would silently do nothing almost
-                        // every time. Querying the actual state first and
-                        // issuing only the one relevant action avoids the
-                        // race outright: un-minimizing alone already
-                        // restores focus (same as clicking a minimized
-                        // window's Dock icon), so `gain_focus` is only
-                        // needed when the window was merely unfocused
-                        // (behind other windows), never minimized.
-                        let main_window = state.main_window;
-                        return window::is_minimized(main_window).then(move |minimized| {
-                            if minimized == Some(true) {
-                                window::minimize(main_window, false)
-                            } else {
-                                window::gain_focus(main_window)
-                            }
-                        });
+                        return bring_window_to_front(state.main_window);
                     }
                     MouseButton::Right => {
                         // The only way to quit once closing the main
@@ -846,7 +868,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             // changed with no location change at all, and the tooltip
             // needs to reflect that too. A harmless no-op re-sync in the
             // branch above, which already called this.
-            sync_tray_tooltip(state);
+            sync_tray_display(state);
             // Whatever brought up first-run setup is now resolved -- a
             // later manual reopen (toolbar gear icon) should show the
             // ordinary "Preferences" copy, not the welcome banner again.
@@ -1108,7 +1130,7 @@ mod tests {
                 about_window: None,
                 is_first_run: false,
                 // Deliberately `None` -- tests shouldn't create a real OS
-                // tray icon, and `sync_tray_tooltip` is a no-op without one.
+                // tray icon, and `sync_tray_display` is a no-op without one.
                 tray_icon: None,
             },
             path,
@@ -1511,14 +1533,36 @@ mod tests {
     }
 
     #[test]
-    fn test_sync_tray_tooltip_is_a_no_op_without_a_tray_icon() {
+    fn test_tray_title_text_is_compact_and_absent_when_theres_nothing_to_say() {
+        // No title at all while loading or after an error -- a blank
+        // title next to the icon would just be visual clutter, not a
+        // placeholder worth showing.
+        assert_eq!(tray_title_text(&WeatherStatus::Loading, false), None);
+        assert_eq!(
+            tray_title_text(&WeatherStatus::Error("boom".to_string()), false),
+            None
+        );
+
+        let weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        assert_eq!(tray_title_text(&weather, false), Some("20°C".to_string()));
+        assert_eq!(tray_title_text(&weather, true), Some("68°F".to_string()));
+
+        // Same "Refreshing reads like Loaded" rule as the tooltip.
+        assert_eq!(
+            tray_title_text(&WeatherStatus::Refreshing(sample_weather("Peoria")), false),
+            Some("20°C".to_string())
+        );
+    }
+
+    #[test]
+    fn test_sync_tray_display_is_a_no_op_without_a_tray_icon() {
         // No real assertion beyond "doesn't panic" -- `test_state` always
         // sets `tray_icon: None`, so this exercises the early-return path
         // that every other test in this module already relies on
-        // implicitly every time `sync_tray_tooltip` runs inside `update()`.
+        // implicitly every time `sync_tray_display` runs inside `update()`.
         let (mut state, path) = test_state(AppConfig::default());
         state.weather = WeatherStatus::Loaded(sample_weather("Peoria"));
-        sync_tray_tooltip(&state);
+        sync_tray_display(&state);
         let _ = std::fs::remove_file(&path);
     }
 
