@@ -49,6 +49,28 @@ impl std::fmt::Display for WeatherApiProvider {
     }
 }
 
+/// The user's chosen theme: an explicit choice, or follow the OS's current
+/// light/dark preference. `app::theme()` resolves `System` using a value
+/// cached from a periodic `dark_light::detect()` poll rather than calling
+/// it directly -- see `app::detect_system_theme_task`'s docs for why.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThemePreference {
+    Light,
+    Dark,
+    #[default]
+    System,
+}
+
+impl std::fmt::Display for ThemePreference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ThemePreference::Light => write!(f, "Light"),
+            ThemePreference::Dark => write!(f, "Dark"),
+            ThemePreference::System => write!(f, "Follow System"),
+        }
+    }
+}
+
 /// A struct representing the user's configured location.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationConfig {
@@ -73,9 +95,10 @@ pub struct AppConfig {
     pub weather_provider: WeatherApiProvider,
     pub location: LocationConfig,
     /// `#[serde(default)]` so config files saved before this field existed
-    /// still load (missing -> `false`, i.e. light mode) instead of failing.
+    /// (or predating its introduction as a `ThemePreference` -- see
+    /// `legacy_dark_mode` below) default to `ThemePreference::System`.
     #[serde(default)]
-    pub dark_mode: bool,
+    pub theme_preference: ThemePreference,
     /// `#[serde(default)]` so config files saved before this field existed
     /// still load (missing -> `false`, i.e. Celsius). Conversion happens at
     /// display time in the UI layer -- the API is always fetched in metric,
@@ -101,6 +124,16 @@ pub struct AppConfig {
     /// only through `get_api_token`/`set_api_token`.
     #[serde(rename = "api_token_encoded", default, skip_serializing)]
     legacy_api_token_encoded: Option<String>,
+    /// Present only to read config files saved by a version of this app
+    /// before `dark_mode: bool` became `theme_preference: ThemePreference`.
+    /// `#[serde(skip_serializing)]` means this is never written back out --
+    /// `ConfigManager::load_config` migrates it into an explicit
+    /// `ThemePreference::Light`/`Dark` (never `System`, since a file that
+    /// had `dark_mode` at all always reflected an explicit choice, not "no
+    /// preference") and it naturally disappears from `config.json` after
+    /// the next save.
+    #[serde(rename = "dark_mode", default, skip_serializing)]
+    legacy_dark_mode: Option<bool>,
 }
 
 impl Default for AppConfig {
@@ -108,11 +141,12 @@ impl Default for AppConfig {
         Self {
             weather_provider: WeatherApiProvider::OpenWeather,
             location: LocationConfig::default(),
-            dark_mode: false,
+            theme_preference: ThemePreference::default(),
             use_fahrenheit: false,
             launch_at_login: false,
             refresh_interval_secs: None,
             legacy_api_token_encoded: None,
+            legacy_dark_mode: None,
         }
     }
 }
@@ -280,6 +314,7 @@ impl ConfigManager {
                 Ok(mut config) => {
                     log::info!("Loaded configuration from {:?}", self.config_path);
                     self.migrate_legacy_token(&mut config);
+                    migrate_legacy_dark_mode(&mut config);
                     config
                 }
                 Err(e) => {
@@ -345,5 +380,23 @@ impl ConfigManager {
                 "Found an api_token_encoded field in config file but couldn't decode it, ignoring: {e}"
             ),
         }
+    }
+}
+
+/// One-time migration for config files saved before `dark_mode: bool`
+/// became `theme_preference: ThemePreference` -- maps the old explicit
+/// boolean onto `Light`/`Dark`. Unlike `migrate_legacy_token`, this doesn't
+/// force an immediate re-save: there's no sensitive data to scrub from
+/// disk, so the harmless `dark_mode` key just lingers in the file until the
+/// next natural Save in Preferences rewrites it with `theme_preference`
+/// instead. A no-op (one `Option` check) for every config file saved since
+/// this migration was added.
+fn migrate_legacy_dark_mode(config: &mut AppConfig) {
+    if let Some(dark_mode) = config.legacy_dark_mode.take() {
+        config.theme_preference = if dark_mode {
+            ThemePreference::Dark
+        } else {
+            ThemePreference::Light
+        };
     }
 }

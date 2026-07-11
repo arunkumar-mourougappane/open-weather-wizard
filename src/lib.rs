@@ -22,7 +22,9 @@ pub mod weather_api;
 /// Contains integration and unit tests for the library.
 #[cfg(test)]
 mod tests {
-    use crate::config::{AppConfig, ConfigManager, LocationConfig, WeatherApiProvider};
+    use crate::config::{
+        AppConfig, ConfigManager, LocationConfig, ThemePreference, WeatherApiProvider,
+    };
     use crate::weather_api::weather_provider::WeatherProviderFactory;
 
     /// The API token lives in a single OS-keyring entry shared by the whole
@@ -75,6 +77,7 @@ mod tests {
         };
         config.refresh_interval_secs = Some(900);
         config.launch_at_login = true;
+        config.theme_preference = ThemePreference::Dark;
 
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("GoogleWeather"));
@@ -82,19 +85,28 @@ mod tests {
         assert!(json.contains("refresh_interval_secs"));
         assert!(json.contains("900"));
         assert!(json.contains("launch_at_login"));
+        assert!(json.contains("theme_preference"));
+        assert!(!json.contains("dark_mode"));
         assert!(!json.contains("api_token"));
 
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.location.city, "Test City");
         assert_eq!(deserialized.refresh_interval_secs, Some(900));
         assert!(deserialized.launch_at_login);
+        assert_eq!(deserialized.theme_preference, ThemePreference::Dark);
 
         // Test migration-safe default where refresh_interval_secs and
-        // launch_at_login are missing.
-        let missing_interval_json = r#"{"weather_provider":"OpenWeather","location":{"city":"Peoria","state":"IL","country":"US"},"dark_mode":false,"use_fahrenheit":false}"#;
+        // launch_at_login are missing, and theme_preference has never been
+        // written (no "dark_mode" key at all either) -- should default to
+        // System, not fall back to Light.
+        let missing_interval_json = r#"{"weather_provider":"OpenWeather","location":{"city":"Peoria","state":"IL","country":"US"},"use_fahrenheit":false}"#;
         let deserialized_default: AppConfig = serde_json::from_str(missing_interval_json).unwrap();
         assert_eq!(deserialized_default.refresh_interval_secs, None);
         assert!(!deserialized_default.launch_at_login);
+        assert_eq!(
+            deserialized_default.theme_preference,
+            ThemePreference::System
+        );
     }
 
     /// Verifies that the refresh interval validation logic enforces the
@@ -175,6 +187,43 @@ mod tests {
         assert!(
             !saved.contains("api_token_encoded"),
             "migration should have rewritten the file without the legacy field"
+        );
+        // The token migration's forced re-save happens after
+        // `migrate_legacy_dark_mode` has already updated `theme_preference`
+        // in memory, so the rewritten file reflects the new field too even
+        // though dark-mode migration itself never triggers its own save.
+        assert!(saved.contains("theme_preference"));
+        assert!(!saved.contains("dark_mode"));
+
+        let _ = std::fs::remove_file(&config_path);
+    }
+
+    /// Verifies that a config file saved by a version of this app before
+    /// `dark_mode: bool` became `theme_preference: ThemePreference` has its
+    /// old explicit boolean mapped onto `Light`/`Dark` on load (never onto
+    /// `System`, since a file that had `dark_mode` at all always reflected
+    /// an explicit choice). Unlike the token migration, this one doesn't
+    /// force an immediate re-save, so the legacy `dark_mode` key is still
+    /// expected to linger in the file until the next real Save.
+    #[test]
+    fn test_legacy_dark_mode_migration() {
+        let config_path = std::env::temp_dir().join(format!(
+            "open-weather-wizard-dark-mode-migration-test-{:?}.json",
+            std::thread::current().id()
+        ));
+
+        let legacy_json = r#"{"weather_provider":"OpenWeather","location":{"city":"Test City","state":"TS","country":"TC"},"dark_mode":true,"use_fahrenheit":false}"#;
+        std::fs::write(&config_path, legacy_json).unwrap();
+
+        let manager = ConfigManager::for_path(config_path.clone());
+        let config = manager.load_config();
+
+        assert_eq!(config.theme_preference, ThemePreference::Dark);
+
+        let untouched = std::fs::read_to_string(&config_path).unwrap();
+        assert!(
+            untouched.contains("dark_mode"),
+            "dark-mode migration should not force a re-save the way token migration does"
         );
 
         let _ = std::fs::remove_file(&config_path);

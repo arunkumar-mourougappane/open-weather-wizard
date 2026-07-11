@@ -12,7 +12,9 @@ use std::time::{Duration, Instant};
 use iced::widget::Space;
 use iced::{Element, Size, Subscription, Task, Theme, window};
 
-use crate::config::{AppConfig, ConfigManager, LocationConfig, WeatherApiProvider};
+use crate::config::{
+    AppConfig, ConfigManager, LocationConfig, ThemePreference, WeatherApiProvider,
+};
 use crate::ui::temperature::{
     celsius_to_display, compass_direction, distance_to_display, distance_unit, format_local_time,
     pressure_to_display, pressure_unit, speed_to_display, speed_unit, unit_symbol,
@@ -115,6 +117,12 @@ pub struct AppState {
     pub weather: WeatherStatus,
     pub forecast: ForecastStatus,
     pub alerts: Vec<WeatherAlert>,
+    /// The OS's current light/dark preference, as of the last
+    /// `detect_system_theme_task` poll -- only consulted by `theme()` when
+    /// `config.theme_preference` (or the live Preferences draft) is
+    /// `ThemePreference::System`. Defaults to `Theme::Light` until the
+    /// first detection (fired at boot) resolves.
+    pub system_theme: Theme,
     /// When `weather` last transitioned to `Loaded`, for the "Updated Xs ago"
     /// label. `main_screen` re-renders often enough (via `AnimationTick`,
     /// already needed for the animated icons) that this stays fresh without
@@ -148,6 +156,10 @@ pub enum Message {
     WeatherFetched(Result<ApiResponse, String>),
     ForecastFetched(Result<ForecastResponse, String>),
     AlertsFetched(Result<Vec<WeatherAlert>, String>),
+    /// Result of `detect_system_theme_task`, fired at boot and again on
+    /// every `RefreshRequested`/`Tick` -- see that function's docs for why
+    /// this is polled rather than pushed.
+    SystemThemeDetected(Theme),
 
     OpenPreferences,
     OpenAbout,
@@ -245,6 +257,32 @@ fn fetch_alerts_task(config: &AppConfig) -> Task<Message> {
                 .map_err(|e| format!("{:?}", e))
         },
         Message::AlertsFetched,
+    )
+}
+
+/// Builds a `Task` that polls the OS's current light/dark preference off
+/// the UI thread. `dark_light::detect()` is a blocking call (on Linux, a
+/// D-Bus round trip to the XDG Desktop Portal, bounded by the crate's own
+/// 25ms timeout) -- calling it directly from `theme()` would run it
+/// synchronously every time iced redraws (including on every
+/// `AnimationTick`, ~30 times a second), freezing rendering. Instead this
+/// runs on the same cadence as the weather refresh (`RefreshRequested`/
+/// `Tick`, plus once at boot) and caches the result in
+/// `AppState::system_theme`, which `theme()` only reads. This means an OS
+/// theme change while the app is running is picked up on the next refresh
+/// tick, not instantly -- `dark-light` has no event/subscription API to
+/// react to it immediately.
+fn detect_system_theme_task() -> Task<Message> {
+    Task::perform(
+        async {
+            match dark_light::detect() {
+                Ok(dark_light::Mode::Dark) => Theme::Dark,
+                Ok(dark_light::Mode::Light | dark_light::Mode::Unspecified) | Err(_) => {
+                    Theme::Light
+                }
+            }
+        },
+        Message::SystemThemeDetected,
     )
 }
 
@@ -382,6 +420,7 @@ pub fn boot() -> (AppState, Task<Message>) {
         weather: WeatherStatus::Loading,
         forecast: ForecastStatus::Loading,
         alerts: vec![],
+        system_theme: Theme::Light,
         last_updated: None,
         value_tracker: transition::ValueTracker::default(),
         selected_forecast_day: None,
@@ -394,7 +433,14 @@ pub fn boot() -> (AppState, Task<Message>) {
         config_manager,
     };
 
-    (state, Task::batch([main_open_task.discard(), second_task]))
+    (
+        state,
+        Task::batch([
+            main_open_task.discard(),
+            second_task,
+            detect_system_theme_task(),
+        ]),
+    )
 }
 
 pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
@@ -419,7 +465,12 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 fetch_weather_task(&state.config),
                 fetch_forecast_task(&state.config),
                 fetch_alerts_task(&state.config),
+                detect_system_theme_task(),
             ])
+        }
+        Message::SystemThemeDetected(theme) => {
+            state.system_theme = theme;
+            Task::none()
         }
         Message::WeatherFetched(Ok(response)) => {
             note_weather_transitions(
@@ -717,17 +768,23 @@ pub fn subscription(state: &AppState) -> Subscription<Message> {
 }
 
 pub fn theme(state: &AppState, _window: window::Id) -> Theme {
-    // Preview the toggle live, across every window, as soon as it's
-    // flipped in Preferences -- not just after Save. `prefs_state` is a
-    // draft; falling back to the persisted config when no Preferences
-    // window is open (or once it's closed via Cancel) means an
-    // unsaved/discarded toggle doesn't leave the theme changed behind it.
-    let dark_mode = state
+    // Preview the choice live, across every window, as soon as it's changed
+    // in Preferences -- not just after Save. `prefs_state` is a draft;
+    // falling back to the persisted config when no Preferences window is
+    // open (or once it's closed via Cancel) means an unsaved/discarded
+    // change doesn't leave the theme changed behind it.
+    let preference = state
         .prefs_state
         .as_ref()
-        .map_or(state.config.dark_mode, |prefs| prefs.dark_mode);
+        .map_or(state.config.theme_preference, |prefs| {
+            prefs.theme_preference
+        });
 
-    if dark_mode { Theme::Dark } else { Theme::Light }
+    match preference {
+        ThemePreference::Light => Theme::Light,
+        ThemePreference::Dark => Theme::Dark,
+        ThemePreference::System => state.system_theme.clone(),
+    }
 }
 
 pub fn title(state: &AppState, window_id: window::Id) -> String {

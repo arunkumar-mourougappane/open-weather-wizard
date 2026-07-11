@@ -10,7 +10,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Font, Length, font};
 
-use crate::config::{AppConfig, WeatherApiProvider};
+use crate::config::{AppConfig, ThemePreference, WeatherApiProvider};
 use crate::ui::style;
 
 const BOLD: Font = Font {
@@ -21,6 +21,12 @@ const BOLD: Font = Font {
 const PROVIDERS: [WeatherApiProvider; 2] = [
     WeatherApiProvider::OpenWeather,
     WeatherApiProvider::GoogleWeather,
+];
+
+const THEME_PREFERENCES: [ThemePreference; 3] = [
+    ThemePreference::Light,
+    ThemePreference::Dark,
+    ThemePreference::System,
 ];
 
 /// Presets for the auto-refresh polling interval, offered as a pick list
@@ -96,7 +102,7 @@ pub struct State {
     pub city_input: String,
     pub state_input: String,
     pub country_input: String,
-    pub dark_mode: bool,
+    pub theme_preference: ThemePreference,
     pub use_fahrenheit: bool,
     pub launch_at_login: bool,
     pub refresh_interval: RefreshIntervalPreset,
@@ -146,7 +152,7 @@ impl State {
             city_input: config.location.city.clone(),
             state_input: config.location.state.clone(),
             country_input: config.location.country.clone(),
-            dark_mode: config.dark_mode,
+            theme_preference: config.theme_preference,
             use_fahrenheit: config.use_fahrenheit,
             launch_at_login: config.launch_at_login,
             refresh_interval: config
@@ -176,7 +182,7 @@ impl State {
         config.location.city = self.city_input.clone();
         config.location.state = self.state_input.clone();
         config.location.country = self.country_input.clone();
-        config.dark_mode = self.dark_mode;
+        config.theme_preference = self.theme_preference;
         config.use_fahrenheit = self.use_fahrenheit;
         config.launch_at_login = self.launch_at_login;
         config.refresh_interval_secs = Some(self.refresh_interval.to_secs());
@@ -223,7 +229,7 @@ pub enum Message {
     CityChanged(String),
     StateChanged(String),
     CountryChanged(String),
-    DarkModeToggled(bool),
+    ThemePreferenceSelected(ThemePreference),
     UnitsToggled(bool),
     LaunchAtLoginToggled(bool),
     RefreshIntervalSelected(RefreshIntervalPreset),
@@ -260,7 +266,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::CityChanged(value) => state.city_input = value,
         Message::StateChanged(value) => state.state_input = value,
         Message::CountryChanged(value) => state.country_input = value,
-        Message::DarkModeToggled(value) => state.dark_mode = value,
+        Message::ThemePreferenceSelected(value) => state.theme_preference = value,
         Message::UnitsToggled(value) => state.use_fahrenheit = value,
         Message::LaunchAtLoginToggled(value) => state.launch_at_login = value,
         Message::RefreshIntervalSelected(value) => state.refresh_interval = value,
@@ -370,9 +376,16 @@ pub fn view(state: &State) -> Element<'_, Message> {
     let appearance_section = section(
         "\u{263e} Appearance & Refresh",
         column![
-            toggler(state.dark_mode)
-                .label("Dark mode")
-                .on_toggle(Message::DarkModeToggled),
+            labeled_row(
+                "Theme:",
+                pick_list(
+                    &THEME_PREFERENCES[..],
+                    Some(state.theme_preference),
+                    Message::ThemePreferenceSelected
+                )
+                .style(style::pick_list)
+                .into()
+            ),
             toggler(state.use_fahrenheit)
                 .label("Use Fahrenheit (\u{b0}F)")
                 .on_toggle(Message::UnitsToggled),
