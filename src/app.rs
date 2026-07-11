@@ -310,6 +310,23 @@ fn fetch_api_token_task(config: &AppConfig) -> Task<Message> {
     )
 }
 
+/// Drops any last-known-good weather/forecast/alerts data rather than
+/// letting it carry forward through the next fetch's `Refreshing` state --
+/// for use whenever what's about to be fetched is for a *different place*
+/// than what's currently displayed (a location switch, or a Preferences
+/// Save that changed which location is current), where showing the old
+/// data while the new fetch is in flight would misleadingly look like a
+/// same-place refresh instead of a different place's page still loading.
+/// Ordinary same-place refreshes (`Message::RefreshRequested`/`Tick`) don't
+/// call this -- they're the one case `Refreshing` exists for.
+fn discard_stale_location_data(state: &mut AppState) {
+    state.weather = WeatherStatus::Loading;
+    state.forecast = ForecastStatus::Loading;
+    state.alerts = vec![];
+    state.selected_forecast_day = None;
+    state.last_updated = None;
+}
+
 /// Records the freshly-formatted display value for each cross-faded
 /// current-conditions field -- `ui::main_screen`'s `hero_view`/`stats_view`
 /// read these same keys back via `ValueTracker::cross_fade`. Must be called
@@ -489,16 +506,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             if let Err(e) = state.config_manager.save_config(&state.config) {
                 log::warn!("Failed to persist location switch: {}", e);
             }
-            // Unlike `RefreshRequested`/`Tick`, drop straight to `Loading`
-            // rather than `Refreshing` -- the previous location's data
-            // belongs to a different place entirely, not a stale copy of
-            // the same one, so carrying it forward would look current when
-            // it isn't.
-            state.weather = WeatherStatus::Loading;
-            state.forecast = ForecastStatus::Loading;
-            state.alerts = vec![];
-            state.selected_forecast_day = None;
-            state.last_updated = None;
+            discard_stale_location_data(state);
             Task::batch([
                 fetch_weather_task(&state.config),
                 fetch_forecast_task(&state.config),
@@ -637,6 +645,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             let Some(prefs_state) = state.prefs_state.take() else {
                 return Task::none();
             };
+            let previous_location = state.config.current_location();
             if let Err(e) = prefs_state.apply_to(&mut state.config) {
                 // A keychain write failed (locked keychain, no Secret
                 // Service running, etc.) -- put the form state back and
@@ -650,6 +659,16 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 log::error!("Failed to save configuration: {}", e);
             } else {
                 log::info!("Configuration saved successfully");
+            }
+            // Editing the active location's own fields (or removing it,
+            // which falls back to a different entry -- see
+            // `preferences::State::apply_to`) changes what "current
+            // location" resolves to just as much as the main window's
+            // switcher does, and needs the same treatment: don't let the
+            // upcoming `RefreshRequested` show the old place's data as
+            // `Refreshing` while the new place's fetch is in flight.
+            if state.config.current_location() != previous_location {
+                discard_stale_location_data(state);
             }
             // Whatever brought up first-run setup is now resolved -- a
             // later manual reopen (toolbar gear icon) should show the
