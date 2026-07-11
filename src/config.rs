@@ -353,8 +353,7 @@ impl AppConfig {
     /// entry is not an error, since that's already the desired end state.
     // The binary crate's own `mod config` (src/main.rs) never calls this --
     // only `examples/clear_credentials.rs` does, which links against the
-    // library crate's copy, a separate compilation -- hence the `allow`
-    // (same reasoning as `ConfigManager::for_path` above).
+    // library crate's copy, a separate compilation -- hence the `allow`.
     #[allow(dead_code)]
     pub fn delete_api_token(&self) -> Result<(), String> {
         match keyring_entry()?.delete_credential() {
@@ -452,12 +451,10 @@ impl ConfigManager {
     /// config directory -- so tests can exercise `load_config`/`save_config`
     /// (in particular the legacy-token migration, which needs real file
     /// I/O) against a throwaway file instead of the user's actual config.
-    // The binary crate's own test build (src/main.rs declares its own
-    // `mod config;`, a separate compilation from the library's) has no
-    // test that calls this -- only src/lib.rs's `test_legacy_token_migration`
-    // does -- hence the `allow`.
+    /// Used by both `src/lib.rs`'s and `src/app.rs`'s own test modules,
+    /// each a separate compilation (the library crate and `src/main.rs`'s
+    /// `mod config;`/`mod app;`) that both exercise it independently.
     #[cfg(test)]
-    #[allow(dead_code)]
     pub(crate) fn for_path(config_path: PathBuf) -> Self {
         Self { config_path }
     }
