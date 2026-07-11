@@ -16,7 +16,7 @@ use crate::ui::temperature::{
     pressure_to_display, pressure_unit, speed_to_display, speed_unit, unit_symbol,
 };
 use crate::ui::transition::ValueTracker;
-use crate::ui::{forecast_row, icons, skeleton, style};
+use crate::ui::{forecast_row, icons, location_switcher, skeleton, style};
 use crate::weather_api::alerts::{AlertSeverity, WeatherAlert};
 use crate::weather_api::forecast::ForecastDay;
 use crate::weather_api::openweather_api::{ApiResponse, Weather, get_weather_symbol};
@@ -81,8 +81,9 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
             return text("No weather data available").into();
         };
 
-        let location_text = if !state.config.location.state.is_empty() {
-            format!("{}, {}", weather_data.name, state.config.location.state)
+        let current_location = state.config.current_location();
+        let location_text = if !current_location.state.is_empty() {
+            format!("{}, {}", weather_data.name, current_location.state)
         } else {
             weather_data.name.clone()
         };
@@ -140,16 +141,19 @@ pub fn view(state: &AppState) -> Element<'_, Message> {
         }
     };
 
-    let mut layout = column![
-        toolbar,
+    let mut layout = column![toolbar].spacing(16).padding(16);
+
+    if let Some(switcher) = location_switcher::view(state) {
+        layout = layout.push(switcher);
+    }
+
+    layout = layout.push(
         container(content)
             .width(Length::Fill)
             .center_x(Length::Fill)
             .padding(24)
             .style(style::panel),
-    ]
-    .spacing(16)
-    .padding(16);
+    );
 
     if let Some(forecast) = forecast_row::view(
         &state.forecast,

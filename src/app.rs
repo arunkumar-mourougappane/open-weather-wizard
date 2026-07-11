@@ -189,6 +189,15 @@ pub enum Message {
     /// whatever Preferences window is currently open, if any; a no-op if
     /// it's already been closed by the time this resolves.
     ApiTokenLoaded(String),
+    /// A location switcher pill was clicked (`ui::location_switcher`) --
+    /// switches `config.current_location_index` and persists it
+    /// immediately, independent of Preferences' Save/Cancel, then
+    /// re-fetches for the newly-current location. Unlike a same-location
+    /// refresh, the previous location's data is discarded outright (back to
+    /// `Loading`, not `Refreshing`) rather than shown while the new fetch
+    /// is in flight -- it belongs to a different place, so carrying it
+    /// forward would misleadingly look current.
+    LocationSwitched(usize),
 
     Preferences(preferences::Message),
 }
@@ -204,7 +213,7 @@ pub enum Message {
 /// keeps it on iced's executor, off the UI thread.
 fn fetch_weather_task(config: &AppConfig) -> Task<Message> {
     let provider_type = config.weather_provider.clone();
-    let location = config.location.clone();
+    let location = config.current_location();
     let config = config.clone();
 
     Task::perform(
@@ -226,7 +235,7 @@ fn fetch_weather_task(config: &AppConfig) -> Task<Message> {
 /// async block rather than before it.
 fn fetch_forecast_task(config: &AppConfig) -> Task<Message> {
     let provider_type = config.weather_provider.clone();
-    let location = config.location.clone();
+    let location = config.current_location();
     let config = config.clone();
 
     Task::perform(
@@ -246,7 +255,7 @@ fn fetch_forecast_task(config: &AppConfig) -> Task<Message> {
 /// Builds a `Task` that fetches active weather alerts.
 fn fetch_alerts_task(config: &AppConfig) -> Task<Message> {
     let provider_type = config.weather_provider.clone();
-    let location = config.location.clone();
+    let location = config.current_location();
     let config = config.clone();
 
     Task::perform(
@@ -471,6 +480,31 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 detect_system_theme_task(),
             ])
         }
+        Message::LocationSwitched(index) => {
+            if index >= state.config.locations.len() || index == state.config.current_location_index
+            {
+                return Task::none();
+            }
+            state.config.current_location_index = index;
+            if let Err(e) = state.config_manager.save_config(&state.config) {
+                log::warn!("Failed to persist location switch: {}", e);
+            }
+            // Unlike `RefreshRequested`/`Tick`, drop straight to `Loading`
+            // rather than `Refreshing` -- the previous location's data
+            // belongs to a different place entirely, not a stale copy of
+            // the same one, so carrying it forward would look current when
+            // it isn't.
+            state.weather = WeatherStatus::Loading;
+            state.forecast = ForecastStatus::Loading;
+            state.alerts = vec![];
+            state.selected_forecast_day = None;
+            state.last_updated = None;
+            Task::batch([
+                fetch_weather_task(&state.config),
+                fetch_forecast_task(&state.config),
+                fetch_alerts_task(&state.config),
+            ])
+        }
         Message::SystemThemeDetected(theme) => {
             state.system_theme = theme;
             Task::none()
@@ -661,9 +695,18 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             prefs_state.is_detecting_location = false;
             match result {
                 Ok(location) => {
-                    prefs_state.city_input = location.city;
-                    prefs_state.state_input = location.state;
-                    prefs_state.country_input = location.country;
+                    // Fills in the entry currently selected in the
+                    // Locations tab strip, not necessarily index 0 --
+                    // detection is meant to prefill whichever saved
+                    // location the user is editing.
+                    if let Some(entry) = prefs_state
+                        .locations
+                        .get_mut(prefs_state.selected_location_index)
+                    {
+                        entry.city = location.city;
+                        entry.state = location.state;
+                        entry.country = location.country;
+                    }
                 }
                 Err(e) => {
                     log::warn!("Location detection failed: {e}");
@@ -693,10 +736,14 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             let provider_type = prefs_state.provider.clone();
             let token =
                 (!prefs_state.token_input.is_empty()).then(|| prefs_state.token_input.clone());
+            // Tests against whichever entry is currently selected in the
+            // Locations tab strip -- "currently-typed", same philosophy as
+            // provider/token above, just per-entry now.
+            let selected_location = &prefs_state.locations[prefs_state.selected_location_index];
             let location = LocationConfig {
-                city: prefs_state.city_input.clone(),
-                state: prefs_state.state_input.clone(),
-                country: prefs_state.country_input.clone(),
+                city: selected_location.city.clone(),
+                state: selected_location.state.clone(),
+                country: selected_location.country.clone(),
             };
             let language = prefs_state.language;
 
@@ -801,6 +848,11 @@ pub fn title(state: &AppState, window_id: window::Id) -> String {
         }
     } else if Some(window_id) == state.about_window {
         "About Weather Wizard".to_string()
+    } else if state.config.locations.len() > 1 {
+        // Only worth naming which location once there's more than one --
+        // otherwise it's just noise repeating what the single "Home" entry
+        // already says everywhere else.
+        format!("Weather Wizard — {}", state.config.current_location_name())
     } else {
         "Weather Wizard".to_string()
     }

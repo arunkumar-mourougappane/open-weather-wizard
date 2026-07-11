@@ -12,7 +12,7 @@
 //! 3.  **Serialization**: Demonstrating the serialization of the `AppConfig`
 //!     struct to a JSON string and deserializing it back.
 
-use open_weather_wizard::config::{AppConfig, LocationConfig, WeatherApiProvider};
+use open_weather_wizard::config::{AppConfig, LocationConfig, SavedLocation, WeatherApiProvider};
 use open_weather_wizard::weather_api::weather_provider::WeatherProviderFactory;
 
 /// The main entry point for the library functionality demo.
@@ -31,11 +31,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut config = AppConfig::default();
     config.weather_provider = WeatherApiProvider::GoogleWeather;
-    config.location = LocationConfig {
-        city: "San Francisco".to_string(),
-        state: "CA".to_string(),
-        country: "US".to_string(),
-    };
+    config.locations = vec![SavedLocation {
+        name: "Home".to_string(),
+        location: LocationConfig {
+            city: "San Francisco".to_string(),
+            state: "CA".to_string(),
+            country: "US".to_string(),
+        },
+    }];
 
     config.set_api_token("demo_api_token_12345")?;
     println!("   ✅ API token stored securely in the OS keychain");
@@ -54,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.language,
     )?;
 
-    let weather_result = provider.get_weather(&config.location).await;
+    let weather_result = provider.get_weather(&config.current_location()).await;
     match weather_result {
         Ok(weather_data) => {
             println!("   ✅ Google Weather Provider works!");
@@ -78,9 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let deserialized: AppConfig = serde_json::from_str(&json)?;
     println!("   ✅ Configuration deserialized successfully");
     println!("      Provider: {:?}", deserialized.weather_provider);
+    let deserialized_location = deserialized.current_location();
     println!(
         "      Location: {}, {}, {}",
-        deserialized.location.city, deserialized.location.state, deserialized.location.country
+        deserialized_location.city, deserialized_location.state, deserialized_location.country
     );
 
     println!("\n✅ All functionality tests completed successfully!");

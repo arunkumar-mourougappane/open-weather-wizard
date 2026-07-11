@@ -10,7 +10,9 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Font, Length, font};
 
-use crate::config::{AppConfig, Language, ThemePreference, WeatherApiProvider};
+use crate::config::{
+    AppConfig, Language, LocationConfig, SavedLocation, ThemePreference, WeatherApiProvider,
+};
 use crate::ui::style;
 
 const BOLD: Font = Font {
@@ -110,13 +112,57 @@ impl std::fmt::Display for RefreshIntervalPreset {
     }
 }
 
+/// A saved location as edited in the Preferences form -- flat fields
+/// (rather than nesting `LocationConfig`) so each field can be wired to its
+/// own `text_input::on_input` the same way the old single-location fields
+/// were.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocationEntry {
+    pub name: String,
+    pub city: String,
+    pub state: String,
+    pub country: String,
+}
+
+impl From<&SavedLocation> for LocationEntry {
+    fn from(saved: &SavedLocation) -> Self {
+        Self {
+            name: saved.name.clone(),
+            city: saved.location.city.clone(),
+            state: saved.location.state.clone(),
+            country: saved.location.country.clone(),
+        }
+    }
+}
+
+impl From<&LocationEntry> for SavedLocation {
+    fn from(entry: &LocationEntry) -> Self {
+        Self {
+            name: entry.name.clone(),
+            location: LocationConfig {
+                city: entry.city.clone(),
+                state: entry.state.clone(),
+                country: entry.country.clone(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct State {
     pub provider: WeatherApiProvider,
     pub token_input: String,
-    pub city_input: String,
-    pub state_input: String,
-    pub country_input: String,
+    /// Every saved location, in display order -- a draft copy of
+    /// `AppConfig.locations`, discarded on Cancel like every other field
+    /// here. Always has at least one entry; `RemoveLocationRequested`
+    /// refuses to drop the last one (see its docs).
+    pub locations: Vec<LocationEntry>,
+    /// Which entry in `locations` the form below is currently showing/
+    /// editing -- purely a Preferences-form concern, distinct from
+    /// `AppConfig.current_location_index` (which one the main window
+    /// shows), so opening Preferences to rename "Work" doesn't change what
+    /// the main window is looking at.
+    pub selected_location_index: usize,
     /// The language weather descriptions are requested in -- not a UI
     /// localization setting, see `Language`'s docs.
     pub language: Language,
@@ -167,9 +213,10 @@ impl State {
         Self {
             provider: config.weather_provider.clone(),
             token_input: String::new(),
-            city_input: config.location.city.clone(),
-            state_input: config.location.state.clone(),
-            country_input: config.location.country.clone(),
+            locations: config.locations.iter().map(LocationEntry::from).collect(),
+            selected_location_index: config
+                .current_location_index
+                .min(config.locations.len().saturating_sub(1)),
             language: config.language,
             theme_preference: config.theme_preference,
             use_fahrenheit: config.use_fahrenheit,
@@ -198,9 +245,20 @@ impl State {
         if !self.token_input.is_empty() {
             config.set_api_token(&self.token_input)?;
         }
-        config.location.city = self.city_input.clone();
-        config.location.state = self.state_input.clone();
-        config.location.country = self.country_input.clone();
+        // Preserve which *location* the main window is currently showing
+        // through the edit by name, not by index -- add/remove/reorder in
+        // this form can shift indices around under it. Falls back to the
+        // first entry if the previously-current one was renamed or removed,
+        // same "just don't crash, degrade to something sane" philosophy as
+        // `AppConfig::current_location`.
+        let current_name = config
+            .locations
+            .get(config.current_location_index)
+            .map(|saved| saved.name.clone());
+        config.locations = self.locations.iter().map(SavedLocation::from).collect();
+        config.current_location_index = current_name
+            .and_then(|name| config.locations.iter().position(|saved| saved.name == name))
+            .unwrap_or(0);
         config.language = self.language;
         config.theme_preference = self.theme_preference;
         config.use_fahrenheit = self.use_fahrenheit;
@@ -218,11 +276,24 @@ impl State {
     pub fn validation_errors(&self) -> Vec<String> {
         let mut errors = Vec::new();
 
-        if self.city_input.trim().is_empty() {
-            errors.push("City is required.".to_string());
-        }
-        if self.country_input.trim().is_empty() {
-            errors.push("Country is required.".to_string());
+        for entry in &self.locations {
+            // A blank name isn't just cosmetic here -- `apply_to` re-finds
+            // the current location by name after Save, so an empty or
+            // duplicate name would make that lookup ambiguous.
+            let label = if entry.name.trim().is_empty() {
+                "(unnamed)".to_string()
+            } else {
+                entry.name.clone()
+            };
+            if entry.name.trim().is_empty() {
+                errors.push("Every saved location needs a name.".to_string());
+            }
+            if entry.city.trim().is_empty() {
+                errors.push(format!("\"{label}\" needs a city."));
+            }
+            if entry.country.trim().is_empty() {
+                errors.push(format!("\"{label}\" needs a country."));
+            }
         }
         // Both providers require a token -- WeatherProviderFactory::create_provider
         // errors out without one for either WeatherApiProvider variant.
@@ -246,9 +317,25 @@ impl State {
 pub enum Message {
     ProviderSelected(WeatherApiProvider),
     TokenChanged(String),
+    /// Switches which entry in `State::locations` the form fields below
+    /// are showing/editing -- not which one the main window displays, see
+    /// `State::selected_location_index`'s docs.
+    LocationSelected(usize),
+    LocationNameChanged(String),
     CityChanged(String),
     StateChanged(String),
     CountryChanged(String),
+    /// Appends a new blank entry to `State::locations` and selects it.
+    AddLocationRequested,
+    /// Removes the currently-selected entry from `State::locations` -- a
+    /// no-op if it's the only one left (see `update`'s docs on why removing
+    /// the last location isn't allowed).
+    RemoveLocationRequested,
+    /// Swaps the currently-selected entry with its neighbor to reorder the
+    /// list, following the selection so repeated clicks keep moving the
+    /// same entry.
+    MoveLocationUp,
+    MoveLocationDown,
     LanguageSelected(Language),
     ThemePreferenceSelected(ThemePreference),
     UnitsToggled(bool),
@@ -284,9 +371,73 @@ pub fn update(state: &mut State, message: Message) {
     match message {
         Message::ProviderSelected(provider) => state.provider = provider,
         Message::TokenChanged(value) => state.token_input = value,
-        Message::CityChanged(value) => state.city_input = value,
-        Message::StateChanged(value) => state.state_input = value,
-        Message::CountryChanged(value) => state.country_input = value,
+        Message::LocationSelected(index) => {
+            if index < state.locations.len() {
+                state.selected_location_index = index;
+                // Stale detection state/error from a different entry
+                // shouldn't bleed into the newly-selected one.
+                state.is_detecting_location = false;
+                state.location_detection_error = None;
+            }
+        }
+        Message::LocationNameChanged(value) => {
+            if let Some(entry) = state.locations.get_mut(state.selected_location_index) {
+                entry.name = value;
+            }
+        }
+        Message::CityChanged(value) => {
+            if let Some(entry) = state.locations.get_mut(state.selected_location_index) {
+                entry.city = value;
+            }
+        }
+        Message::StateChanged(value) => {
+            if let Some(entry) = state.locations.get_mut(state.selected_location_index) {
+                entry.state = value;
+            }
+        }
+        Message::CountryChanged(value) => {
+            if let Some(entry) = state.locations.get_mut(state.selected_location_index) {
+                entry.country = value;
+            }
+        }
+        Message::AddLocationRequested => {
+            state.locations.push(LocationEntry {
+                name: format!("Location {}", state.locations.len() + 1),
+                city: String::new(),
+                state: String::new(),
+                country: String::new(),
+            });
+            state.selected_location_index = state.locations.len() - 1;
+        }
+        Message::RemoveLocationRequested => {
+            // At least one saved location must always exist -- the main
+            // window has nothing to show otherwise. The button driving this
+            // message is itself disabled at that point (see `view`), but
+            // guard here too since nothing else enforces it.
+            if state.locations.len() > 1 {
+                state.locations.remove(state.selected_location_index);
+                state.selected_location_index =
+                    state.selected_location_index.min(state.locations.len() - 1);
+            }
+        }
+        Message::MoveLocationUp => {
+            if state.selected_location_index > 0 {
+                state.locations.swap(
+                    state.selected_location_index,
+                    state.selected_location_index - 1,
+                );
+                state.selected_location_index -= 1;
+            }
+        }
+        Message::MoveLocationDown => {
+            if state.selected_location_index + 1 < state.locations.len() {
+                state.locations.swap(
+                    state.selected_location_index,
+                    state.selected_location_index + 1,
+                );
+                state.selected_location_index += 1;
+            }
+        }
         Message::LanguageSelected(value) => state.language = value,
         Message::ThemePreferenceSelected(value) => state.theme_preference = value,
         Message::UnitsToggled(value) => state.use_fahrenheit = value,
@@ -368,29 +519,71 @@ pub fn view(state: &State) -> Element<'_, Message> {
 
     let provider_section = section("\u{2699} Weather Provider", provider_column.into());
 
+    let mut location_tabs = row![].spacing(6);
+    for (index, entry) in state.locations.iter().enumerate() {
+        let label = if entry.name.trim().is_empty() {
+            "(unnamed)".to_string()
+        } else {
+            entry.name.clone()
+        };
+        let is_selected = index == state.selected_location_index;
+        location_tabs = location_tabs.push(
+            button(text(label).size(12))
+                .on_press(Message::LocationSelected(index))
+                .style(if is_selected {
+                    style::accent_button
+                } else {
+                    style::secondary_button
+                }),
+        );
+    }
+    location_tabs = location_tabs.push(
+        button(text("+ Add").size(12))
+            .on_press(Message::AddLocationRequested)
+            .style(style::secondary_button),
+    );
+
+    // Always in bounds: `update()` clamps `selected_location_index` on every
+    // add/remove/reorder, and `locations` is never emptied (see its docs).
+    let selected = &state.locations[state.selected_location_index];
+    let can_remove = state.locations.len() > 1;
+
     let mut location_column = column![
+        location_tabs,
+        labeled_row(
+            "Name:",
+            text_input("Enter a name for this location", &selected.name)
+                .on_input(Message::LocationNameChanged)
+                .style(style::text_input)
+                .into()
+        ),
         labeled_row(
             "City:",
-            text_input("Enter city name", &state.city_input)
+            text_input("Enter city name", &selected.city)
                 .on_input(Message::CityChanged)
                 .style(style::text_input)
                 .into()
         ),
         labeled_row(
             "State/Province:",
-            text_input("Enter state or province", &state.state_input)
+            text_input("Enter state or province", &selected.state)
                 .on_input(Message::StateChanged)
                 .style(style::text_input)
                 .into()
         ),
         labeled_row(
             "Country:",
-            text_input("Enter country code (e.g., US, CA)", &state.country_input)
+            text_input("Enter country code (e.g., US, CA)", &selected.country)
                 .on_input(Message::CountryChanged)
                 .style(style::text_input)
                 .into()
         ),
         detect_location_row(state.is_detecting_location),
+        location_actions_row(
+            can_remove,
+            state.selected_location_index,
+            state.locations.len()
+        ),
     ]
     .spacing(12);
 
@@ -400,10 +593,10 @@ pub fn view(state: &State) -> Element<'_, Message> {
         ));
     }
 
-    // "Home" rather than "Default Location": this is a single saved place
-    // (where the app opens showing conditions for), not a location picker --
-    // multi-location support is tracked separately (issue #5).
-    let location_section = section("\u{2302} Home", location_column.into());
+    // "Locations" rather than "Home": the app now supports saving several
+    // places and switching between them from the main window (issue #55);
+    // the tab strip above picks which one this form is editing.
+    let location_section = section("\u{2302} Locations", location_column.into());
 
     let appearance_section = section(
         "\u{263e} Appearance & Refresh",
@@ -561,6 +754,28 @@ fn detect_location_row(is_detecting: bool) -> Element<'static, Message> {
         .on_press_maybe((!is_detecting).then_some(Message::DetectLocationRequested))
         .style(style::secondary_button),
     ]
+    .align_y(Alignment::Center)
+    .into()
+}
+
+/// Remove/reorder controls for the currently-selected saved location,
+/// indented to align under the Locations section's fields. Remove is
+/// disabled entirely (rather than erroring on press) when it's the only
+/// location left; Move Up/Down are disabled at the ends of the list.
+fn location_actions_row(can_remove: bool, index: usize, count: usize) -> Element<'static, Message> {
+    row![
+        space::horizontal().width(160),
+        button(text("Remove").size(12))
+            .on_press_maybe(can_remove.then_some(Message::RemoveLocationRequested))
+            .style(style::secondary_button),
+        button(text("\u{2191} Move Up").size(12))
+            .on_press_maybe((index > 0).then_some(Message::MoveLocationUp))
+            .style(style::secondary_button),
+        button(text("\u{2193} Move Down").size(12))
+            .on_press_maybe((index + 1 < count).then_some(Message::MoveLocationDown))
+            .style(style::secondary_button),
+    ]
+    .spacing(8)
     .align_y(Alignment::Center)
     .into()
 }

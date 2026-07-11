@@ -11,7 +11,7 @@
 //! ```sh
 //! OPENWEATHER_API_KEY=your-key-here cargo run --example openweather_test
 //! ```
-use open_weather_wizard::config::{AppConfig, LocationConfig, WeatherApiProvider};
+use open_weather_wizard::config::{AppConfig, LocationConfig, SavedLocation, WeatherApiProvider};
 use open_weather_wizard::weather_api::weather_provider::WeatherProviderFactory;
 
 /// The main entry point for the OpenWeather API integration test.
@@ -26,14 +26,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut config = AppConfig::default();
     config.weather_provider = WeatherApiProvider::OpenWeather;
-    config.location = LocationConfig {
-        city: "London".to_string(),
-        state: "".to_string(),
-        // OpenWeatherMap's geocoding endpoint expects an ISO 3166-1 alpha-2
-        // country code -- "UK" isn't one (the correct code is "GB") and
-        // silently returns zero results rather than an error.
-        country: "GB".to_string(),
-    };
+    config.locations = vec![SavedLocation {
+        name: "Home".to_string(),
+        location: LocationConfig {
+            city: "London".to_string(),
+            state: "".to_string(),
+            // OpenWeatherMap's geocoding endpoint expects an ISO 3166-1
+            // alpha-2 country code -- "UK" isn't one (the correct code is
+            // "GB") and silently returns zero results rather than an error.
+            country: "GB".to_string(),
+        },
+    }];
 
     // Never hardcode a real API key in source -- read it from the
     // environment instead. This example is a live integration test, run
@@ -57,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.language,
     )?;
 
-    match provider.get_weather(&config.location).await {
+    match provider.get_weather(&config.current_location()).await {
         Ok(weather_data) => {
             println!("\n✅ OpenWeather API Provider works!");
             println!("   City: {}", weather_data.name);
@@ -73,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    match provider.get_forecast(&config.location).await {
+    match provider.get_forecast(&config.current_location()).await {
         Ok(forecast) => {
             println!("\n✅ OpenWeather forecast fetched!");
             for day in &forecast.days {

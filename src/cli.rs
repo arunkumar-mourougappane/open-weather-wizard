@@ -47,6 +47,14 @@ pub struct Cli {
     #[arg(long, requires = "headless")]
     pub json: bool,
 
+    /// Select a saved location by name for this one query (see the GUI's
+    /// Preferences "Locations" section) -- falls back to whichever one is
+    /// current if omitted. `--city`/`--state`/`--country` below still
+    /// override individual fields on top of whichever location this
+    /// resolves to.
+    #[arg(long, requires = "headless")]
+    pub location: Option<String>,
+
     /// Override the configured city for this one query.
     #[arg(long, requires = "headless")]
     pub city: Option<String>,
@@ -108,19 +116,28 @@ fn run_inner(cli: &Cli) -> Result<(), String> {
         None => config.weather_provider.clone(),
     };
 
+    let base_location = match &cli.location {
+        Some(name) => config
+            .locations
+            .iter()
+            .find(|saved| saved.name.eq_ignore_ascii_case(name))
+            .map(|saved| saved.location.clone())
+            .ok_or_else(|| {
+                let available = config
+                    .locations
+                    .iter()
+                    .map(|saved| saved.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("No saved location named '{name}' (available: {available})")
+            })?,
+        None => config.current_location(),
+    };
+
     let location = LocationConfig {
-        city: cli
-            .city
-            .clone()
-            .unwrap_or_else(|| config.location.city.clone()),
-        state: cli
-            .state
-            .clone()
-            .unwrap_or_else(|| config.location.state.clone()),
-        country: cli
-            .country
-            .clone()
-            .unwrap_or_else(|| config.location.country.clone()),
+        city: cli.city.clone().unwrap_or(base_location.city),
+        state: cli.state.clone().unwrap_or(base_location.state),
+        country: cli.country.clone().unwrap_or(base_location.country),
     };
 
     let token = std::env::var(TOKEN_ENV_VAR)
