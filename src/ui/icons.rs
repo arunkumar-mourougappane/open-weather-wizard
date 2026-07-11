@@ -121,6 +121,41 @@ pub fn load_tray_icon(asset_path: &str) -> Option<tray::Icon> {
     tray::Icon::from_rgba(rgba.into_raw(), width, height).ok()
 }
 
+/// Sets the Dock icon directly via AppKit, bypassing `iced`/`winit` --
+/// `winit::window::Window::set_window_icon` (what `iced::window::Settings::
+/// icon` maps to, see `load_window_icon`) is a documented no-op on macOS,
+/// so a bare `cargo run` dev binary (not packaged into a proper `.app`
+/// bundle with an `Info.plist`/`.icns`) would otherwise show a generic
+/// executable icon in the Dock instead of this app's own. Call once, early
+/// in `boot()`; a no-op (with a warning logged) if the asset is missing,
+/// the image fails to decode, or this somehow isn't running on the main
+/// thread -- a wrong/missing Dock icon is cosmetic, never worth a crash.
+#[cfg(target_os = "macos")]
+pub fn set_dock_icon_macos(asset_path: &str) {
+    use objc2::AnyThread;
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::{MainThreadMarker, NSData};
+
+    let Some(file) = WeatherIconsAsset::get(asset_path) else {
+        log::warn!("Dock icon asset not found: {asset_path}");
+        return;
+    };
+    let Some(mtm) = MainThreadMarker::new() else {
+        log::warn!("Could not set Dock icon: not running on the main thread");
+        return;
+    };
+
+    let data = NSData::with_bytes(file.data.as_ref());
+    let image = NSImage::initWithData(NSImage::alloc(), &data);
+    let Some(image) = image else {
+        log::warn!("Failed to decode Dock icon image from {asset_path}");
+        return;
+    };
+
+    let app = NSApplication::sharedApplication(mtm);
+    unsafe { app.setApplicationIconImage(Some(&image)) };
+}
+
 /// Maps every `WeatherSymbol` to its hand-authored `assets/lottie/*.json`
 /// animation. Conditions that don't have a visually distinct animation of
 /// their own share the closest match (e.g. Mist/Smoke/Fog all drift the same

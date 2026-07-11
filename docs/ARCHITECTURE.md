@@ -242,11 +242,35 @@ environment -- the crate's own per-platform modules (`windows.rs` via
 either way, so the same integration should hold, but treat that as
 unconfirmed until someone actually runs it there.
 
-The `tray` crate has no context-menu API (only icon/tooltip/click events),
-which is why this integration doesn't attempt "hide the main window to the
-tray and quit from a tray menu instead" -- without a menu item to quit from,
-that would strand users with no way to fully exit the app. The main window's
-close behavior is unchanged from before this feature.
+**Closing the main window hides it to the tray instead of quitting**, when a
+tray icon exists -- the point of "a lightweight, persistent way to see
+current conditions without the full main window open" (the issue's own
+framing) is that closing the window is a normal thing to do, not the same as
+quitting. `window::close` would destroy the window outright (no way to
+reopen it under the same `window::Id`), so `WindowCloseRequested`'s handler
+minimizes instead (`window::minimize(id, true)`) when `state.tray_icon.
+is_some()`, falling back to actually quitting if the tray icon failed to
+create -- with no tray, there'd be no way to ever get the window back
+otherwise.
+
+Left-clicking the tray icon un-minimizes and focuses the window back
+(`window::minimize(id, false)` before `window::gain_focus(id)` -- the latter
+alone is documented as a no-op on a minimized/not-visible window, which is
+exactly the state a click is trying to recover from). The `tray` crate has
+no context-menu API (only icon/tooltip/click events), so **right-clicking
+the tray icon is the only remaining way to quit** once closing the window no
+longer does -- what a menu's "Quit" item would have done anyway, absent an
+actual menu to put it in.
+
+A separate, unrelated fix bundled with this work: `winit::window::Window::
+set_window_icon` (what `iced::window::Settings::icon` maps to) is documented
+as unsupported on macOS entirely, so a bare `cargo run`/`cargo build` dev
+binary (not packaged into a proper `.app` bundle) showed a generic
+executable icon in the Dock. `icons::set_dock_icon_macos` bypasses `winit`
+and sets it directly via `NSApplication.setApplicationIconImage` (`objc2`,
+consistent with this project's other macOS-native code), called once early
+in `boot()`. Packaged release builds are unaffected either way -- they
+already got their Dock icon from `packaging/macos/Info.plist`'s `.icns`.
 
 ## CI / build
 

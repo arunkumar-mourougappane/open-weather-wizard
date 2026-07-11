@@ -59,9 +59,18 @@ tokio-test = "0.4.3"
 # bindings.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSArray", "NSObject", "NSError"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSObject", "NSError", "NSData"] }
 objc2-core-location = { version = "0.3", features = ["CLLocationManager", "CLLocationManagerDelegate", "CLLocation"] }
 objc2-core-foundation = { version = "0.3", features = ["CFRunLoop", "CFDate"] }
+# Sets the Dock icon directly via AppKit (src/ui/icons.rs's
+# `set_dock_icon_macos`) -- `winit::window::Window::set_window_icon`
+# (`iced::window::Settings::icon`) is a documented no-op on macOS, so a bare
+# `cargo run` dev binary (not packaged into a proper `.app` bundle with an
+# `Info.plist`/`.icns`) would otherwise show a generic executable icon in
+# the Dock. Already a transitive dependency via `tray`'s own macOS backend;
+# declared directly here too since this app's own code uses it, not just
+# `tray`'s internals.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSImage", "NSRunningApplication"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62", features = ["Devices_Geolocation"] }
