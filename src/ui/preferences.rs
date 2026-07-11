@@ -163,6 +163,18 @@ pub struct State {
     /// shows), so opening Preferences to rename "Work" doesn't change what
     /// the main window is looking at.
     pub selected_location_index: usize,
+    /// Tracks the position of whatever entry was `AppConfig.
+    /// current_location_index` when this form opened. Kept in sync as an
+    /// *index* by `AddLocationRequested`/`RemoveLocationRequested`/
+    /// `MoveLocationUp`/`MoveLocationDown` (the only messages that actually
+    /// shift entries around) rather than re-derived from the entry's name
+    /// after the fact -- a rename doesn't move an entry's position, so
+    /// tracking the position survives a rename for free, and two entries
+    /// are always allowed to share a name (nothing here enforces
+    /// uniqueness) which would make a name-based lookup ambiguous anyway.
+    /// `None` only once the tracked entry has actually been removed, at
+    /// which point `apply_to` falls back to index 0.
+    current_location_index: Option<usize>,
     /// The language weather descriptions are requested in -- not a UI
     /// localization setting, see `Language`'s docs.
     pub language: Language,
@@ -217,6 +229,11 @@ impl State {
             selected_location_index: config
                 .current_location_index
                 .min(config.locations.len().saturating_sub(1)),
+            current_location_index: Some(
+                config
+                    .current_location_index
+                    .min(config.locations.len().saturating_sub(1)),
+            ),
             language: config.language,
             theme_preference: config.theme_preference,
             use_fahrenheit: config.use_fahrenheit,
@@ -245,20 +262,13 @@ impl State {
         if !self.token_input.is_empty() {
             config.set_api_token(&self.token_input)?;
         }
-        // Preserve which *location* the main window is currently showing
-        // through the edit by name, not by index -- add/remove/reorder in
-        // this form can shift indices around under it. Falls back to the
-        // first entry if the previously-current one was renamed or removed,
-        // same "just don't crash, degrade to something sane" philosophy as
-        // `AppConfig::current_location`.
-        let current_name = config
-            .locations
-            .get(config.current_location_index)
-            .map(|saved| saved.name.clone());
         config.locations = self.locations.iter().map(SavedLocation::from).collect();
-        config.current_location_index = current_name
-            .and_then(|name| config.locations.iter().position(|saved| saved.name == name))
-            .unwrap_or(0);
+        // `current_location_index` has already been kept in sync as an
+        // index by every message that actually moves entries around (see
+        // its docs) -- `None` only once the tracked entry has been removed
+        // outright, same "just don't crash, degrade to something sane"
+        // philosophy as `AppConfig::current_location`.
+        config.current_location_index = self.current_location_index.unwrap_or(0);
         config.language = self.language;
         config.theme_preference = self.theme_preference;
         config.use_fahrenheit = self.use_fahrenheit;
@@ -408,6 +418,10 @@ pub fn update(state: &mut State, message: Message) {
                 country: String::new(),
             });
             state.selected_location_index = state.locations.len() - 1;
+            // Appending doesn't shift anything before it, so the tracked
+            // "current" index (if any) still points at the same entry.
+            state.is_detecting_location = false;
+            state.location_detection_error = None;
         }
         Message::RemoveLocationRequested => {
             // At least one saved location must always exist -- the main
@@ -415,27 +429,48 @@ pub fn update(state: &mut State, message: Message) {
             // message is itself disabled at that point (see `view`), but
             // guard here too since nothing else enforces it.
             if state.locations.len() > 1 {
-                state.locations.remove(state.selected_location_index);
+                let removed_index = state.selected_location_index;
+                state.locations.remove(removed_index);
                 state.selected_location_index =
                     state.selected_location_index.min(state.locations.len() - 1);
+                state.current_location_index = match state.current_location_index {
+                    // The tracked entry itself was just removed -- `apply_to`
+                    // falls back to index 0 for a `None` here.
+                    Some(current) if current == removed_index => None,
+                    // Everything after the removed entry shifts down by one.
+                    Some(current) if current > removed_index => Some(current - 1),
+                    other => other,
+                };
+                state.is_detecting_location = false;
+                state.location_detection_error = None;
             }
         }
         Message::MoveLocationUp => {
             if state.selected_location_index > 0 {
-                state.locations.swap(
+                let (a, b) = (
                     state.selected_location_index,
                     state.selected_location_index - 1,
                 );
-                state.selected_location_index -= 1;
+                state.locations.swap(a, b);
+                state.selected_location_index = b;
+                state.current_location_index =
+                    swap_tracked_index(state.current_location_index, a, b);
+                state.is_detecting_location = false;
+                state.location_detection_error = None;
             }
         }
         Message::MoveLocationDown => {
             if state.selected_location_index + 1 < state.locations.len() {
-                state.locations.swap(
+                let (a, b) = (
                     state.selected_location_index,
                     state.selected_location_index + 1,
                 );
-                state.selected_location_index += 1;
+                state.locations.swap(a, b);
+                state.selected_location_index = b;
+                state.current_location_index =
+                    swap_tracked_index(state.current_location_index, a, b);
+                state.is_detecting_location = false;
+                state.location_detection_error = None;
             }
         }
         Message::LanguageSelected(value) => state.language = value,
@@ -451,6 +486,22 @@ pub fn update(state: &mut State, message: Message) {
             // Handled by the parent; nothing to do locally.
         }
     }
+}
+
+/// Adjusts a tracked location index after swapping the entries at `a` and
+/// `b` (`MoveLocationUp`/`MoveLocationDown`) -- if the tracked index was
+/// pointing at either swapped position, it now points at the other one;
+/// otherwise it's untouched.
+fn swap_tracked_index(tracked: Option<usize>, a: usize, b: usize) -> Option<usize> {
+    tracked.map(|i| {
+        if i == a {
+            b
+        } else if i == b {
+            a
+        } else {
+            i
+        }
+    })
 }
 
 /// Where to get an API key for each provider, and a matching link label --

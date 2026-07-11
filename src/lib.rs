@@ -279,6 +279,93 @@ mod tests {
         assert!(errors.iter().any(|e| e.contains("needs a city")));
     }
 
+    /// Verifies that `apply_to` keeps `AppConfig.current_location_index`
+    /// pointing at the location the main window was actually showing,
+    /// through operations that move entries around underneath it --
+    /// renaming the active entry (its position doesn't change, so tracking
+    /// it by name would break here but tracking it by position doesn't),
+    /// and reordering it to a different position. See `State::
+    /// current_location_index`'s docs for why this is tracked as a
+    /// position rather than re-derived from a name after the fact.
+    #[test]
+    fn test_apply_to_preserves_current_location_through_rename_and_reorder() {
+        use crate::ui::preferences::{self, State as PrefsState};
+
+        // apply_to writes token_input via set_api_token, an OS keychain
+        // call -- switch to the mock backend like every other test that
+        // exercises apply_to/set_api_token.
+        let _guard = lock_mock_keyring();
+
+        let mut config = AppConfig::default();
+        config.locations.push(SavedLocation {
+            name: "Work".to_string(),
+            location: LocationConfig {
+                city: "Chicago".to_string(),
+                state: "IL".to_string(),
+                country: "US".to_string(),
+            },
+        });
+        // "Home" (index 0) is current.
+        assert_eq!(config.current_location_index, 0);
+
+        let mut prefs_state = PrefsState::from_config(&config);
+        prefs_state.token_input = "dummy_token".to_string();
+
+        // Rename the currently-active entry -- a name-based lookup would
+        // lose track of it here, since "Home" no longer exists afterward.
+        preferences::update(&mut prefs_state, preferences::Message::LocationSelected(0));
+        preferences::update(
+            &mut prefs_state,
+            preferences::Message::LocationNameChanged("Apartment".to_string()),
+        );
+        prefs_state.apply_to(&mut config).unwrap();
+        assert_eq!(config.current_location_index, 0);
+        assert_eq!(config.current_location_name(), "Apartment");
+        assert_eq!(config.current_location().city, "Peoria");
+
+        // Now move it down a position -- the tracked index should follow.
+        preferences::update(&mut prefs_state, preferences::Message::MoveLocationDown);
+        prefs_state.apply_to(&mut config).unwrap();
+        assert_eq!(config.current_location_index, 1);
+        assert_eq!(config.current_location_name(), "Apartment");
+        assert_eq!(config.current_location().city, "Peoria");
+    }
+
+    /// Verifies that removing the currently-active location falls back to
+    /// index 0, the same "don't crash, degrade to something sane" behavior
+    /// as an out-of-range index.
+    #[test]
+    fn test_apply_to_falls_back_when_current_location_removed() {
+        use crate::ui::preferences::{self, State as PrefsState};
+
+        let _guard = lock_mock_keyring();
+
+        let mut config = AppConfig::default();
+        config.locations.push(SavedLocation {
+            name: "Work".to_string(),
+            location: LocationConfig {
+                city: "Chicago".to_string(),
+                state: "IL".to_string(),
+                country: "US".to_string(),
+            },
+        });
+
+        let mut prefs_state = PrefsState::from_config(&config);
+        prefs_state.token_input = "dummy_token".to_string();
+
+        // Remove "Home" (the currently-active entry) while it's selected.
+        preferences::update(&mut prefs_state, preferences::Message::LocationSelected(0));
+        preferences::update(
+            &mut prefs_state,
+            preferences::Message::RemoveLocationRequested,
+        );
+        prefs_state.apply_to(&mut config).unwrap();
+
+        assert_eq!(config.locations.len(), 1);
+        assert_eq!(config.current_location_index, 0);
+        assert_eq!(config.current_location_name(), "Work");
+    }
+
     /// Verifies that a config file saved by an older version of this app
     /// (a base64 `api_token_encoded` field alongside the other settings)
     /// has its token transparently migrated into the OS keyring on load,
