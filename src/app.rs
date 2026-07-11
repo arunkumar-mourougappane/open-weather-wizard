@@ -498,6 +498,17 @@ pub fn boot() -> (AppState, Task<Message>) {
         size: Size::new(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT),
         min_size: Some(MAIN_WINDOW_MIN_SIZE),
         icon: crate::ui::icons::load_window_icon("icon/icon.png"),
+        // `window::Settings::default()`'s `exit_on_close_request: true`
+        // would make iced_winit destroy the window itself the instant the
+        // native close button is clicked (`WindowEvent::CloseRequested` ->
+        // an automatic `window::close`), racing ahead of and completely
+        // bypassing whatever `Message::WindowCloseRequested`'s handler
+        // decides to do -- which is exactly why minimizing-to-tray on
+        // close never actually worked: the window was already gone by the
+        // time that handler ran. `false` here hands control entirely to
+        // that handler instead, which is required for "close hides to
+        // tray" to do anything at all.
+        exit_on_close_request: false,
         ..window::Settings::default()
     });
 
@@ -708,17 +719,34 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                 match button {
                     MouseButton::Left => {
                         // `gain_focus` alone documents itself as a no-op if
-                        // the window is minimized or not visible -- exactly
-                        // the state a user clicking the tray icon is most
-                        // likely trying to recover from (including a main
-                        // window closed via `WindowCloseRequested`, which
-                        // now minimizes rather than exits while a tray icon
-                        // exists -- see that handler), so un-minimize first
-                        // unconditionally (harmless if it wasn't).
-                        return Task::batch([
-                            window::minimize(state.main_window, false),
-                            window::gain_focus(state.main_window),
-                        ]);
+                        // the window is minimized -- exactly the state a
+                        // user clicking the tray icon is most likely trying
+                        // to recover from (including a main window closed
+                        // via `WindowCloseRequested`, which now minimizes
+                        // rather than exits while a tray icon exists -- see
+                        // that handler). Naively batching `minimize(false)`
+                        // and `gain_focus` together doesn't work: winit's
+                        // own `focus_window` (what `gain_focus` calls on
+                        // macOS) checks `isMiniaturized()` and no-ops if
+                        // still true, and `deminiaturize`'s un-minimize
+                        // animation hasn't necessarily finished by the time
+                        // both actions are dispatched in the same tick, so
+                        // `gain_focus` would silently do nothing almost
+                        // every time. Querying the actual state first and
+                        // issuing only the one relevant action avoids the
+                        // race outright: un-minimizing alone already
+                        // restores focus (same as clicking a minimized
+                        // window's Dock icon), so `gain_focus` is only
+                        // needed when the window was merely unfocused
+                        // (behind other windows), never minimized.
+                        let main_window = state.main_window;
+                        return window::is_minimized(main_window).then(move |minimized| {
+                            if minimized == Some(true) {
+                                window::minimize(main_window, false)
+                            } else {
+                                window::gain_focus(main_window)
+                            }
+                        });
                     }
                     MouseButton::Right => {
                         // The only way to quit once closing the main
