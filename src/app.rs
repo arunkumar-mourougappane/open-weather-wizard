@@ -20,7 +20,7 @@ use crate::ui::temperature::{
     pressure_to_display, pressure_unit, speed_to_display, speed_unit, unit_symbol,
 };
 use crate::ui::{about, icons, main_screen, preferences, transition};
-use crate::weather_api::alerts::WeatherAlert;
+use crate::weather_api::alerts::{AlertSeverity, WeatherAlert};
 use crate::weather_api::forecast::ForecastResponse;
 use crate::weather_api::openweather_api::{ApiResponse, WeatherSymbol, get_weather_symbol};
 use crate::weather_api::weather_provider::WeatherProviderFactory;
@@ -470,25 +470,46 @@ fn build_tray_icon() -> Option<TrayIcon> {
     }
 }
 
+/// Whether any currently-active alert is severe enough to warrant flagging
+/// on the tray icon (issue #56 phase 4) -- same severity threshold and
+/// glyph (`⚠`) `ui/main_screen.rs::alerts_view` already uses to pick its
+/// danger styling, so "severe" means the same thing in the tray as it does
+/// in the main window.
+fn has_severe_alert(alerts: &[WeatherAlert]) -> bool {
+    alerts.iter().any(|alert| {
+        matches!(
+            alert.severity,
+            AlertSeverity::Severe | AlertSeverity::Extreme
+        )
+    })
+}
+
 /// Builds the tray icon's tooltip text from the current weather status --
 /// a pure function (unlike `sync_tray_display`, which also has to reach
 /// into `state.tray_icon` and make the actual OS call) purely so the text
-/// itself is unit-testable without needing a real `TrayIcon`.
-fn tray_tooltip_text(weather: &WeatherStatus, use_fahrenheit: bool) -> String {
+/// itself is unit-testable without needing a real `TrayIcon`. Prefixed with
+/// a `⚠` badge whenever `alerts` contains an active Severe/Extreme alert,
+/// so something urgent is visible without opening the app.
+fn tray_tooltip_text(
+    weather: &WeatherStatus,
+    use_fahrenheit: bool,
+    alerts: &[WeatherAlert],
+) -> String {
+    let badge = if has_severe_alert(alerts) { "⚠ " } else { "" };
     match weather {
         WeatherStatus::Loaded(response) | WeatherStatus::Refreshing(response) => {
             match response.weather.first() {
                 Some(condition) => format!(
-                    "Weather Wizard — {:.0}{} {}",
+                    "{badge}Weather Wizard — {:.0}{} {}",
                     celsius_to_display(response.main.temp, use_fahrenheit),
                     unit_symbol(use_fahrenheit),
                     condition.description
                 ),
-                None => "Weather Wizard".to_string(),
+                None => format!("{badge}Weather Wizard"),
             }
         }
-        WeatherStatus::Loading => "Weather Wizard — Loading…".to_string(),
-        WeatherStatus::Error(_) => "Weather Wizard — couldn't fetch weather".to_string(),
+        WeatherStatus::Loading => format!("{badge}Weather Wizard — Loading…"),
+        WeatherStatus::Error(_) => format!("{badge}Weather Wizard — couldn't fetch weather"),
     }
 }
 
@@ -497,15 +518,28 @@ fn tray_tooltip_text(weather: &WeatherStatus, use_fahrenheit: bool) -> String {
 /// visible on hover), this is always on display, so it stays as compact as
 /// the system's own menu bar weather widget ("78°F"). `None` while loading
 /// or after a fetch error, rather than some placeholder text, so a blank
-/// title doesn't crowd the icon with nothing useful to say.
-fn tray_title_text(weather: &WeatherStatus, use_fahrenheit: bool) -> Option<String> {
+/// title doesn't crowd the icon with nothing useful to say. Still gets the
+/// `⚠` severe-alert badge even while loading/erroring, since that's exactly
+/// when a user might otherwise have no reason to open the app and notice.
+fn tray_title_text(
+    weather: &WeatherStatus,
+    use_fahrenheit: bool,
+    alerts: &[WeatherAlert],
+) -> Option<String> {
+    let badge = if has_severe_alert(alerts) { "⚠ " } else { "" };
     match weather {
         WeatherStatus::Loaded(response) | WeatherStatus::Refreshing(response) => Some(format!(
-            "{:.0}{}",
+            "{badge}{:.0}{}",
             celsius_to_display(response.main.temp, use_fahrenheit),
             unit_symbol(use_fahrenheit)
         )),
-        WeatherStatus::Loading | WeatherStatus::Error(_) => None,
+        WeatherStatus::Loading | WeatherStatus::Error(_) => {
+            if badge.is_empty() {
+                None
+            } else {
+                Some(badge.trim_end().to_string())
+            }
+        }
     }
 }
 
@@ -535,11 +569,11 @@ fn sync_tray_display(state: &AppState) {
     let Some(tray_icon) = &state.tray_icon else {
         return;
     };
-    let tooltip = tray_tooltip_text(&state.weather, state.config.use_fahrenheit);
+    let tooltip = tray_tooltip_text(&state.weather, state.config.use_fahrenheit, &state.alerts);
     if let Err(e) = tray_icon.set_tooltip(Some(tooltip)) {
         log::warn!("Failed to update tray icon tooltip: {e}");
     }
-    let title = tray_title_text(&state.weather, state.config.use_fahrenheit);
+    let title = tray_title_text(&state.weather, state.config.use_fahrenheit, &state.alerts);
     tray_icon.set_title(title.as_deref());
     if let Some(symbol) = tray_icon_symbol(&state.weather)
         && let Some(icon) = icons::tray_icon_for(symbol)
@@ -750,6 +784,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::AlertsFetched(Ok(alerts)) => {
             state.alerts = alerts;
+            sync_tray_display(state);
             Task::none()
         }
         Message::AlertsFetched(Err(error)) => {
@@ -1420,20 +1455,7 @@ mod tests {
         let _ = update(&mut state, Message::AlertsFetched(Ok(vec![])));
         assert!(state.alerts.is_empty());
 
-        let alert = crate::weather_api::alerts::WeatherAlert {
-            id: "1".to_string(),
-            title: "Severe Thunderstorm".to_string(),
-            description: String::new(),
-            event_type: String::new(),
-            severity: crate::weather_api::alerts::AlertSeverity::Severe,
-            start_time: 0,
-            end_time: 0,
-            urgency: String::new(),
-            certainty: String::new(),
-            area_name: String::new(),
-            instruction: vec![],
-            safety_recommendations: vec![],
-        };
+        let alert = sample_alert(AlertSeverity::Severe);
         let _ = update(&mut state, Message::AlertsFetched(Ok(vec![alert])));
         assert_eq!(state.alerts.len(), 1);
 
@@ -1536,24 +1558,44 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// Builds a `WeatherAlert` with the given severity for phase 4 (tray
+    /// alert badge) tests -- the other fields don't affect
+    /// `has_severe_alert`/the tray badge text, so they're left empty.
+    fn sample_alert(severity: AlertSeverity) -> WeatherAlert {
+        WeatherAlert {
+            id: "1".to_string(),
+            title: "Severe Thunderstorm".to_string(),
+            description: String::new(),
+            event_type: String::new(),
+            severity,
+            start_time: 0,
+            end_time: 0,
+            urgency: String::new(),
+            certainty: String::new(),
+            area_name: String::new(),
+            instruction: vec![],
+            safety_recommendations: vec![],
+        }
+    }
+
     #[test]
     fn test_tray_tooltip_text_reflects_weather_status_and_units() {
         assert_eq!(
-            tray_tooltip_text(&WeatherStatus::Loading, false),
+            tray_tooltip_text(&WeatherStatus::Loading, false, &[]),
             "Weather Wizard — Loading…"
         );
         assert_eq!(
-            tray_tooltip_text(&WeatherStatus::Error("boom".to_string()), false),
+            tray_tooltip_text(&WeatherStatus::Error("boom".to_string()), false, &[]),
             "Weather Wizard — couldn't fetch weather"
         );
 
         let weather = WeatherStatus::Loaded(sample_weather("Peoria"));
         assert_eq!(
-            tray_tooltip_text(&weather, false),
+            tray_tooltip_text(&weather, false, &[]),
             "Weather Wizard — 20°C clear sky"
         );
         assert_eq!(
-            tray_tooltip_text(&weather, true),
+            tray_tooltip_text(&weather, true, &[]),
             "Weather Wizard — 68°F clear sky"
         );
 
@@ -1563,7 +1605,7 @@ mod tests {
         let mut refreshing_data = sample_weather("Peoria");
         refreshing_data.main.temp = 20.0;
         assert_eq!(
-            tray_tooltip_text(&WeatherStatus::Refreshing(refreshing_data), false),
+            tray_tooltip_text(&WeatherStatus::Refreshing(refreshing_data), false, &[]),
             "Weather Wizard — 20°C clear sky"
         );
     }
@@ -1573,20 +1615,76 @@ mod tests {
         // No title at all while loading or after an error -- a blank
         // title next to the icon would just be visual clutter, not a
         // placeholder worth showing.
-        assert_eq!(tray_title_text(&WeatherStatus::Loading, false), None);
+        assert_eq!(tray_title_text(&WeatherStatus::Loading, false, &[]), None);
         assert_eq!(
-            tray_title_text(&WeatherStatus::Error("boom".to_string()), false),
+            tray_title_text(&WeatherStatus::Error("boom".to_string()), false, &[]),
             None
         );
 
         let weather = WeatherStatus::Loaded(sample_weather("Peoria"));
-        assert_eq!(tray_title_text(&weather, false), Some("20°C".to_string()));
-        assert_eq!(tray_title_text(&weather, true), Some("68°F".to_string()));
+        assert_eq!(
+            tray_title_text(&weather, false, &[]),
+            Some("20°C".to_string())
+        );
+        assert_eq!(
+            tray_title_text(&weather, true, &[]),
+            Some("68°F".to_string())
+        );
 
         // Same "Refreshing reads like Loaded" rule as the tooltip.
         assert_eq!(
-            tray_title_text(&WeatherStatus::Refreshing(sample_weather("Peoria")), false),
+            tray_title_text(
+                &WeatherStatus::Refreshing(sample_weather("Peoria")),
+                false,
+                &[]
+            ),
             Some("20°C".to_string())
+        );
+    }
+
+    #[test]
+    fn test_has_severe_alert_only_flags_severe_and_extreme() {
+        assert!(!has_severe_alert(&[]));
+        assert!(!has_severe_alert(&[sample_alert(AlertSeverity::Minor)]));
+        assert!(!has_severe_alert(&[sample_alert(AlertSeverity::Moderate)]));
+        assert!(has_severe_alert(&[sample_alert(AlertSeverity::Severe)]));
+        assert!(has_severe_alert(&[sample_alert(AlertSeverity::Extreme)]));
+        // One severe alert among otherwise-unremarkable ones still counts.
+        assert!(has_severe_alert(&[
+            sample_alert(AlertSeverity::Minor),
+            sample_alert(AlertSeverity::Extreme),
+        ]));
+    }
+
+    #[test]
+    fn test_tray_tooltip_and_title_carry_a_severe_alert_badge() {
+        let severe = [sample_alert(AlertSeverity::Severe)];
+        let minor = [sample_alert(AlertSeverity::Minor)];
+
+        let weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        assert_eq!(
+            tray_tooltip_text(&weather, false, &severe),
+            "⚠ Weather Wizard — 20°C clear sky"
+        );
+        assert_eq!(
+            tray_tooltip_text(&weather, false, &minor),
+            "Weather Wizard — 20°C clear sky",
+            "a Minor alert shouldn't trigger the severe badge"
+        );
+        assert_eq!(
+            tray_title_text(&weather, false, &severe),
+            Some("⚠ 20°C".to_string())
+        );
+
+        // Even with no weather data to show, a severe alert is still worth
+        // flagging via the title -- unlike the ordinary "no title" case.
+        assert_eq!(
+            tray_title_text(&WeatherStatus::Loading, false, &severe),
+            Some("⚠".to_string())
+        );
+        assert_eq!(
+            tray_title_text(&WeatherStatus::Loading, false, &minor),
+            None
         );
     }
 
