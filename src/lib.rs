@@ -23,7 +23,8 @@ pub mod weather_api;
 #[cfg(test)]
 mod tests {
     use crate::config::{
-        AppConfig, ConfigManager, Language, LocationConfig, ThemePreference, WeatherApiProvider,
+        AppConfig, ConfigManager, Language, LocationConfig, SavedLocation, ThemePreference,
+        WeatherApiProvider,
     };
     use crate::weather_api::weather_provider::WeatherProviderFactory;
 
@@ -70,11 +71,14 @@ mod tests {
     fn test_config_serialization() {
         let mut config = AppConfig::default();
         config.weather_provider = WeatherApiProvider::GoogleWeather;
-        config.location = LocationConfig {
-            city: "Test City".to_string(),
-            state: "TS".to_string(),
-            country: "TC".to_string(),
-        };
+        config.locations = vec![SavedLocation {
+            name: "Home".to_string(),
+            location: LocationConfig {
+                city: "Test City".to_string(),
+                state: "TS".to_string(),
+                country: "TC".to_string(),
+            },
+        }];
         config.refresh_interval_secs = Some(900);
         config.launch_at_login = true;
         config.theme_preference = ThemePreference::Dark;
@@ -88,11 +92,12 @@ mod tests {
         assert!(json.contains("launch_at_login"));
         assert!(json.contains("theme_preference"));
         assert!(json.contains("\"language\":\"Spanish\""));
+        assert!(json.contains("\"locations\""));
         assert!(!json.contains("dark_mode"));
         assert!(!json.contains("api_token"));
 
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.location.city, "Test City");
+        assert_eq!(deserialized.locations[0].location.city, "Test City");
         assert_eq!(deserialized.refresh_interval_secs, Some(900));
         assert!(deserialized.launch_at_login);
         assert_eq!(deserialized.theme_preference, ThemePreference::Dark);
@@ -165,12 +170,11 @@ mod tests {
         config.weather_provider = WeatherApiProvider::OpenWeather;
         config.refresh_interval_secs = Some(30);
 
-        // OpenWeather with 30 seconds is valid.
+        // OpenWeather with 30 seconds is valid. `AppConfig::default()`
+        // already seeds a valid Peoria/IL/US "Home" location, so only the
+        // token needs filling in for the other validators not to trigger.
         let mut prefs_state = PrefsState::from_config(&config);
-        // Set inputs to valid strings so other validators don't trigger.
         prefs_state.token_input = "dummy_token".to_string();
-        prefs_state.city_input = "Peoria".to_string();
-        prefs_state.country_input = "US".to_string();
 
         let errors = prefs_state.validation_errors();
         assert!(
@@ -199,6 +203,80 @@ mod tests {
             "Google Weather with 15m should be valid: {:?}",
             errors
         );
+    }
+
+    /// Verifies the Preferences "Locations" list's add/remove/reorder
+    /// messages (issue #55): a new entry is appended and selected, removal
+    /// is refused once only one location remains (rather than emptying the
+    /// list), and Move Up/Down swap the selected entry with its neighbor
+    /// while following the selection.
+    #[test]
+    fn test_location_list_management() {
+        use crate::ui::preferences::{self, State as PrefsState};
+
+        let config = AppConfig::default();
+        let mut prefs_state = PrefsState::from_config(&config);
+        assert_eq!(prefs_state.locations.len(), 1);
+
+        // Adding selects the new (blank) entry.
+        preferences::update(&mut prefs_state, preferences::Message::AddLocationRequested);
+        assert_eq!(prefs_state.locations.len(), 2);
+        assert_eq!(prefs_state.selected_location_index, 1);
+
+        preferences::update(
+            &mut prefs_state,
+            preferences::Message::LocationNameChanged("Work".to_string()),
+        );
+        assert_eq!(prefs_state.locations[1].name, "Work");
+
+        // Move the new entry up to the front, following the selection.
+        preferences::update(&mut prefs_state, preferences::Message::MoveLocationUp);
+        assert_eq!(prefs_state.selected_location_index, 0);
+        assert_eq!(prefs_state.locations[0].name, "Work");
+        assert_eq!(prefs_state.locations[1].name, "Home");
+
+        // Removing down to one entry works...
+        preferences::update(
+            &mut prefs_state,
+            preferences::Message::RemoveLocationRequested,
+        );
+        assert_eq!(prefs_state.locations.len(), 1);
+        assert_eq!(prefs_state.locations[0].name, "Home");
+
+        // ...but removing the last one is refused.
+        preferences::update(
+            &mut prefs_state,
+            preferences::Message::RemoveLocationRequested,
+        );
+        assert_eq!(
+            prefs_state.locations.len(),
+            1,
+            "the last saved location must never be removable"
+        );
+    }
+
+    /// Verifies that every saved location needs a name, city, and country
+    /// before Save is allowed -- multiple entries are each validated, not
+    /// just whichever one is currently selected in the form.
+    #[test]
+    fn test_location_list_validation() {
+        use crate::ui::preferences::{LocationEntry, State as PrefsState};
+
+        let config = AppConfig::default();
+        let mut prefs_state = PrefsState::from_config(&config);
+        prefs_state.token_input = "dummy_token".to_string();
+        assert!(prefs_state.validation_errors().is_empty());
+
+        prefs_state.locations.push(LocationEntry {
+            name: String::new(),
+            city: String::new(),
+            state: String::new(),
+            country: "US".to_string(),
+        });
+
+        let errors = prefs_state.validation_errors();
+        assert!(errors.iter().any(|e| e.contains("needs a name")));
+        assert!(errors.iter().any(|e| e.contains("needs a city")));
     }
 
     /// Verifies that a config file saved by an older version of this app
@@ -275,6 +353,68 @@ mod tests {
         let _ = std::fs::remove_file(&config_path);
     }
 
+    /// Verifies that a config file saved by a version of this app before
+    /// the single `location: LocationConfig` field became
+    /// `locations: Vec<SavedLocation>` (issue #55) has its old location
+    /// wrapped into a one-entry list named "Home", with
+    /// `current_location_index` pointing at it. Like
+    /// `test_legacy_dark_mode_migration`, this doesn't force a re-save, so
+    /// the legacy `location` key is expected to linger until the next real
+    /// Save.
+    #[test]
+    fn test_legacy_location_migration() {
+        let config_path = std::env::temp_dir().join(format!(
+            "open-weather-wizard-location-migration-test-{:?}.json",
+            std::thread::current().id()
+        ));
+
+        let legacy_json = r#"{"weather_provider":"OpenWeather","location":{"city":"Test City","state":"TS","country":"TC"},"dark_mode":false,"use_fahrenheit":false}"#;
+        std::fs::write(&config_path, legacy_json).unwrap();
+
+        let manager = ConfigManager::for_path(config_path.clone());
+        let config = manager.load_config();
+
+        assert_eq!(config.locations.len(), 1);
+        assert_eq!(config.locations[0].name, "Home");
+        assert_eq!(config.locations[0].location.city, "Test City");
+        assert_eq!(config.current_location_index, 0);
+        assert_eq!(config.current_location().city, "Test City");
+        assert_eq!(config.current_location_name(), "Home");
+
+        let untouched = std::fs::read_to_string(&config_path).unwrap();
+        assert!(
+            untouched.contains("\"location\""),
+            "location migration should not force a re-save the way token migration does"
+        );
+
+        let _ = std::fs::remove_file(&config_path);
+    }
+
+    /// Verifies `AppConfig::current_location`/`current_location_name`
+    /// degrade gracefully (fall back to the first entry, or a fresh
+    /// default if the list is somehow empty) rather than panicking when
+    /// `current_location_index` is out of range -- e.g. a hand-edited
+    /// config file, since nothing else in this codebase can produce that
+    /// state through normal use.
+    #[test]
+    fn test_current_location_out_of_range_falls_back() {
+        let mut config = AppConfig::default();
+        config.current_location_index = 5;
+        assert_eq!(config.current_location(), config.locations[0].location);
+        assert_eq!(config.current_location_name(), "Home");
+
+        config.locations = vec![];
+        assert_eq!(config.current_location(), LocationConfig::default());
+        assert_eq!(config.current_location_name(), "Home");
+
+        config.locations = vec![SavedLocation {
+            name: "Only One".to_string(),
+            location: LocationConfig::default(),
+        }];
+        config.current_location_index = 0;
+        assert_eq!(config.current_location_name(), "Only One");
+    }
+
     /// Verifies `ConfigManager::config_exists` -- the signal `app::boot`
     /// uses to detect a fresh install (see issue #38) -- correctly reports
     /// `false` before any config has ever been saved and `true` immediately
@@ -348,11 +488,14 @@ mod tests {
 
         let mut config = AppConfig::default();
         config.weather_provider = WeatherApiProvider::OpenWeather;
-        config.location = LocationConfig {
-            city: "Test City".to_string(),
-            state: "TS".to_string(),
-            country: "TC".to_string(),
-        };
+        config.locations = vec![SavedLocation {
+            name: "Home".to_string(),
+            location: LocationConfig {
+                city: "Test City".to_string(),
+                state: "TS".to_string(),
+                country: "TC".to_string(),
+            },
+        }];
         config.set_api_token("test_token").unwrap();
 
         let shared_config = Arc::new(Mutex::new(config));
@@ -360,21 +503,21 @@ mod tests {
         // Test reading from the Arc<Mutex<AppConfig>>
         {
             let config_guard = shared_config.lock().unwrap();
-            assert_eq!(config_guard.location.city, "Test City");
+            assert_eq!(config_guard.locations[0].location.city, "Test City");
             assert_eq!(config_guard.get_api_token().unwrap(), "test_token");
         }
 
         // Test writing to the Arc<Mutex<AppConfig>>
         {
             let mut config_guard = shared_config.lock().unwrap();
-            config_guard.location.city = "Updated City".to_string();
+            config_guard.locations[0].location.city = "Updated City".to_string();
             config_guard.set_api_token("new_token").unwrap();
         }
 
         // Verify the changes
         {
             let config_guard = shared_config.lock().unwrap();
-            assert_eq!(config_guard.location.city, "Updated City");
+            assert_eq!(config_guard.locations[0].location.city, "Updated City");
             assert_eq!(config_guard.get_api_token().unwrap(), "new_token");
         }
     }

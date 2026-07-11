@@ -157,7 +157,7 @@ impl std::fmt::Display for Language {
 }
 
 /// A struct representing the user's configured location.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LocationConfig {
     pub city: String,
     pub state: String,
@@ -174,11 +174,44 @@ impl Default for LocationConfig {
     }
 }
 
+/// A named, saved location -- one entry in `AppConfig.locations`. The name
+/// is purely a user-facing label (shown in the Preferences list and the
+/// main window's location switcher); it plays no role in fetching, which
+/// only ever reads the `location` field.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SavedLocation {
+    pub name: String,
+    pub location: LocationConfig,
+}
+
+impl Default for SavedLocation {
+    fn default() -> Self {
+        Self {
+            name: "Home".to_string(),
+            location: LocationConfig::default(),
+        }
+    }
+}
+
 /// The main struct for the application's configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub weather_provider: WeatherApiProvider,
-    pub location: LocationConfig,
+    /// Every saved location, in display order. Never empty in practice --
+    /// `AppConfig::default()` seeds one entry, `migrate_legacy_location`
+    /// guarantees at least one after loading an old config file, and
+    /// `preferences::State` refuses to remove the last remaining entry --
+    /// but `current_location()` still degrades gracefully rather than
+    /// panicking if that invariant is ever violated (e.g. a hand-edited
+    /// config file).
+    #[serde(default)]
+    pub locations: Vec<SavedLocation>,
+    /// Index into `locations` for whichever one the main window shows on
+    /// launch -- updated immediately (and persisted) whenever the user
+    /// switches locations from the main window's switcher, independent of
+    /// Preferences' Save/Cancel.
+    #[serde(default)]
+    pub current_location_index: usize,
     /// `#[serde(default)]` so config files saved before this field existed
     /// (or predating its introduction as a `ThemePreference` -- see
     /// `legacy_dark_mode` below) default to `ThemePreference::System`.
@@ -226,13 +259,23 @@ pub struct AppConfig {
     /// the next save.
     #[serde(rename = "dark_mode", default, skip_serializing)]
     legacy_dark_mode: Option<bool>,
+    /// Present only to read config files saved by a version of this app
+    /// before the single `location: LocationConfig` field became
+    /// `locations: Vec<SavedLocation>` (issue #55). `#[serde(skip_serializing)]`
+    /// means this is never written back out -- `ConfigManager::load_config`
+    /// migrates it into a one-entry `locations` list named "Home" (never
+    /// forcing a re-save, same reasoning as `legacy_dark_mode`) and it
+    /// naturally disappears from `config.json` after the next save.
+    #[serde(rename = "location", default, skip_serializing)]
+    legacy_location: Option<LocationConfig>,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             weather_provider: WeatherApiProvider::OpenWeather,
-            location: LocationConfig::default(),
+            locations: vec![SavedLocation::default()],
+            current_location_index: 0,
             theme_preference: ThemePreference::default(),
             use_fahrenheit: false,
             launch_at_login: false,
@@ -240,11 +283,37 @@ impl Default for AppConfig {
             language: Language::default(),
             legacy_api_token_encoded: None,
             legacy_dark_mode: None,
+            legacy_location: None,
         }
     }
 }
 
 impl AppConfig {
+    /// The location the main window should show -- whichever `locations`
+    /// entry `current_location_index` points at, falling back to the first
+    /// entry (or a brand-new default) if the index is out of range or the
+    /// list is somehow empty, rather than panicking on a hand-edited config
+    /// file. Returns an owned value since every call site already needs to
+    /// clone it into an async fetch task regardless.
+    pub fn current_location(&self) -> LocationConfig {
+        self.locations
+            .get(self.current_location_index)
+            .or_else(|| self.locations.first())
+            .map(|saved| saved.location.clone())
+            .unwrap_or_default()
+    }
+
+    /// The name of the location `current_location()` resolves to, for
+    /// display (e.g. the main window's location switcher). Same
+    /// out-of-range/empty fallback as `current_location`.
+    pub fn current_location_name(&self) -> &str {
+        self.locations
+            .get(self.current_location_index)
+            .or_else(|| self.locations.first())
+            .map(|saved| saved.name.as_str())
+            .unwrap_or("Home")
+    }
+
     /// Stores the API token in the OS's secure credential store (macOS
     /// Keychain, Windows Credential Manager, Linux Secret Service).
     ///
@@ -408,6 +477,7 @@ impl ConfigManager {
                     log::info!("Loaded configuration from {:?}", self.config_path);
                     self.migrate_legacy_token(&mut config);
                     migrate_legacy_dark_mode(&mut config);
+                    migrate_legacy_location(&mut config);
                     config
                 }
                 Err(e) => {
@@ -492,4 +562,26 @@ fn migrate_legacy_dark_mode(config: &mut AppConfig) {
             ThemePreference::Light
         };
     }
+}
+
+/// One-time migration for config files saved before the single
+/// `location: LocationConfig` field became `locations: Vec<SavedLocation>`
+/// (issue #55) -- wraps the old location into a one-entry list named
+/// "Home" and points `current_location_index` at it. Guarded on
+/// `locations.is_empty()` rather than "was legacy_location present",
+/// since a config file that already has `locations` (this migration
+/// already ran and was re-saved once) will have dropped the legacy key
+/// entirely -- checking the list itself is the same invariant-preserving
+/// approach as the rest of `AppConfig`'s never-empty guarantee. Like
+/// `migrate_legacy_dark_mode`, this doesn't force an immediate re-save.
+fn migrate_legacy_location(config: &mut AppConfig) {
+    if !config.locations.is_empty() {
+        return;
+    }
+    let location = config.legacy_location.take().unwrap_or_default();
+    config.locations.push(SavedLocation {
+        name: "Home".to_string(),
+        location,
+    });
+    config.current_location_index = 0;
 }
