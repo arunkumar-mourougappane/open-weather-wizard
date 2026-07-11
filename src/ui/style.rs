@@ -4,7 +4,8 @@
 //! styles, used across every screen instead of one-off inline colors.
 //! Backgrounds/borders/muted text are derived from the active `Theme`'s
 //! `extended_palette()` (not hardcoded) so the same styles work correctly
-//! under both `Theme::Light` and `Theme::Dark` -- see `AppConfig::dark_mode`.
+//! under both `Theme::Light` and `Theme::Dark` -- see
+//! `AppConfig::theme_preference`.
 
 use iced::widget::{button, container, text};
 use iced::{Background, Border, Color, Shadow, Theme, Vector};
