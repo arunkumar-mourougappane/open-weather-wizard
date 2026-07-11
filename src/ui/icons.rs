@@ -121,6 +121,31 @@ pub fn load_tray_icon(asset_path: &str) -> Option<tray::Icon> {
     tray::Icon::from_rgba(rgba.into_raw(), width, height).ok()
 }
 
+/// Maps a `WeatherSymbol` to its pre-rendered tray icon under
+/// `assets/tray/` (issue #56 phase 3) -- derived from `asset_path`'s own
+/// mapping (stripping `static/`/`.svg` for `tray/`/`.png`) rather than a
+/// second hand-kept table, so the two can never silently drift apart:
+/// several symbols intentionally share one source SVG (see `asset_path`'s
+/// docs), and this reuses exactly the same grouping. The actual PNGs are
+/// generated once by `examples/generate_tray_icons.rs`, not rasterized at
+/// runtime -- see that file's docs for why.
+fn tray_asset_path(symbol: WeatherSymbol) -> String {
+    let svg_path = asset_path(symbol);
+    let basename = svg_path
+        .strip_prefix("static/")
+        .and_then(|s| s.strip_suffix(".svg"))
+        .expect("asset_path always returns \"static/<name>.svg\"");
+    format!("tray/{basename}.png")
+}
+
+/// Loads the tray icon variant for the given `WeatherSymbol` -- `None` if
+/// the asset is somehow missing or fails to decode, in which case callers
+/// should just leave the tray icon showing whatever it already had rather
+/// than clearing it to nothing.
+pub fn tray_icon_for(symbol: WeatherSymbol) -> Option<tray::Icon> {
+    load_tray_icon(&tray_asset_path(symbol))
+}
+
 /// Sets the Dock icon directly via AppKit, bypassing `iced`/`winit` --
 /// `winit::window::Window::set_window_icon` (what `iced::window::Settings::
 /// icon` maps to, see `load_window_icon`) is a documented no-op on macOS,

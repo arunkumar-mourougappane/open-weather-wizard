@@ -11,8 +11,14 @@ license = "MIT"
 keywords = ["weather", "gui", "iced", "desktop", "forecast"]
 categories = ["gui"]
 # examples/lottie_spike.rs and examples/tray_spike.rs are throwaway
-# prototypes (see their own doc comments), not usage examples.
-exclude = ["examples/lottie_spike.rs", "examples/tray_spike.rs"]
+# prototypes (see their own doc comments); examples/generate_tray_icons.rs
+# is a reusable dev tool for regenerating assets/tray/*.png, not something
+# a consumer of the published crate needs. None are usage examples.
+exclude = [
+    "examples/lottie_spike.rs",
+    "examples/tray_spike.rs",
+    "examples/generate_tray_icons.rs",
+]
 
 [dependencies]
 env_logger = "0.11.8"
@@ -52,7 +58,10 @@ name = "open-weather-wizard"
 path = "src/main.rs"
 
 [dev-dependencies]
+resvg = "=0.45.1"
+tiny-skia = "=0.11.4"
 tokio-test = "0.4.3"
+usvg = "=0.45.1"
 
 # OS-native location backends (src/geolocation.rs's `os_location` module) --
 # one per platform, so e.g. a Linux build never pulls in objc2/CoreLocation

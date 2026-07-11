@@ -22,7 +22,7 @@ use crate::ui::temperature::{
 use crate::ui::{about, icons, main_screen, preferences, transition};
 use crate::weather_api::alerts::WeatherAlert;
 use crate::weather_api::forecast::ForecastResponse;
-use crate::weather_api::openweather_api::ApiResponse;
+use crate::weather_api::openweather_api::{ApiResponse, WeatherSymbol, get_weather_symbol};
 use crate::weather_api::weather_provider::WeatherProviderFactory;
 use tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
@@ -509,7 +509,23 @@ fn tray_title_text(weather: &WeatherStatus, use_fahrenheit: bool) -> Option<Stri
     }
 }
 
-/// Refreshes the tray icon's title and tooltip from `state.weather`/
+/// Determines which `WeatherSymbol` icon variant the tray icon should show
+/// (issue #56 phase 3) -- `None` while loading or after a fetch error, in
+/// which case `sync_tray_display` leaves whatever icon is already showing
+/// alone rather than clearing it to nothing. `Refreshing` reads the same
+/// as `Loaded`, same "don't flicker on a background refresh" rule as
+/// `tray_tooltip_text`/`tray_title_text`.
+fn tray_icon_symbol(weather: &WeatherStatus) -> Option<WeatherSymbol> {
+    match weather {
+        WeatherStatus::Loaded(response) | WeatherStatus::Refreshing(response) => response
+            .weather
+            .first()
+            .map(|condition| get_weather_symbol(&condition.main)),
+        WeatherStatus::Loading | WeatherStatus::Error(_) => None,
+    }
+}
+
+/// Refreshes the tray icon's image, title, and tooltip from `state.weather`/
 /// `state.config.use_fahrenheit` -- called wherever either one changes:
 /// `WeatherFetched`, `discard_stale_location_data` (a location switch or a
 /// Preferences Save that changed the current location), and Preferences
@@ -525,6 +541,26 @@ fn sync_tray_display(state: &AppState) {
     }
     let title = tray_title_text(&state.weather, state.config.use_fahrenheit);
     tray_icon.set_title(title.as_deref());
+    if let Some(symbol) = tray_icon_symbol(&state.weather)
+        && let Some(icon) = icons::tray_icon_for(symbol)
+    {
+        // `TrayIcon::set_icon` alone hardcodes the template flag to
+        // `false` internally (a `tray` crate quirk, not documented),
+        // silently discarding `build_tray_icon`'s
+        // `with_icon_as_template(true)` the first time the icon changes --
+        // `set_icon_with_as_template` is what actually preserves it. That
+        // variant is a deliberate macOS-only no-op on other platforms
+        // (matching its own docs), so `set_icon` is still correct there,
+        // where "template" isn't a meaningful concept anyway.
+        #[cfg(target_os = "macos")]
+        let result = tray_icon.set_icon_with_as_template(Some(icon), true);
+        #[cfg(not(target_os = "macos"))]
+        let result = tray_icon.set_icon(Some(icon));
+
+        if let Err(e) = result {
+            log::warn!("Failed to update tray icon image: {e}");
+        }
+    }
 }
 
 pub fn boot() -> (AppState, Task<Message>) {
@@ -1552,6 +1588,68 @@ mod tests {
             tray_title_text(&WeatherStatus::Refreshing(sample_weather("Peoria")), false),
             Some("20°C".to_string())
         );
+    }
+
+    #[test]
+    fn test_tray_icon_symbol_reflects_weather_status() {
+        // No symbol at all while loading or after an error -- `sync_tray_display`
+        // leaves whatever icon is already showing alone in both cases.
+        assert_eq!(tray_icon_symbol(&WeatherStatus::Loading), None);
+        assert_eq!(
+            tray_icon_symbol(&WeatherStatus::Error("boom".to_string())),
+            None
+        );
+
+        let weather = WeatherStatus::Loaded(sample_weather("Peoria"));
+        assert_eq!(tray_icon_symbol(&weather), Some(WeatherSymbol::Clear));
+
+        // Same "Refreshing reads like Loaded" rule as the tooltip/title.
+        assert_eq!(
+            tray_icon_symbol(&WeatherStatus::Refreshing(sample_weather("Peoria"))),
+            Some(WeatherSymbol::Clear)
+        );
+
+        let mut rainy = sample_weather("Peoria");
+        rainy.weather[0].main = "Rain".to_string();
+        assert_eq!(
+            tray_icon_symbol(&WeatherStatus::Loaded(rainy)),
+            Some(WeatherSymbol::Rain)
+        );
+    }
+
+    #[test]
+    fn test_tray_icon_for_every_symbol_loads_a_real_icon() {
+        // Every WeatherSymbol variant must resolve to an embedded,
+        // decodable PNG -- a regression here (a missing/renamed asset, or
+        // `icons::tray_asset_path` drifting from `icons::asset_path`)
+        // would silently leave the tray icon stuck on whatever it last
+        // showed instead of erroring, so it's worth pinning down directly
+        // rather than only trusting `examples/generate_tray_icons.rs` ran
+        // correctly.
+        const ALL_SYMBOLS: [WeatherSymbol; 16] = [
+            WeatherSymbol::Clear,
+            WeatherSymbol::Clouds,
+            WeatherSymbol::Rain,
+            WeatherSymbol::Drizzle,
+            WeatherSymbol::Thunderstorm,
+            WeatherSymbol::Snow,
+            WeatherSymbol::Mist,
+            WeatherSymbol::Smoke,
+            WeatherSymbol::Haze,
+            WeatherSymbol::Dust,
+            WeatherSymbol::Fog,
+            WeatherSymbol::Sand,
+            WeatherSymbol::Ash,
+            WeatherSymbol::Squall,
+            WeatherSymbol::Tornado,
+            WeatherSymbol::Default,
+        ];
+        for symbol in ALL_SYMBOLS {
+            assert!(
+                icons::tray_icon_for(symbol).is_some(),
+                "{symbol:?} has no loadable tray icon"
+            );
+        }
     }
 
     #[test]
