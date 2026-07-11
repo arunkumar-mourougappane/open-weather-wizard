@@ -25,7 +25,7 @@
 //! timezone`). The `jiff` crate resolves the correct DST-aware offset for
 //! that zone id at that instant.
 
-use crate::config::LocationConfig;
+use crate::config::{Language, LocationConfig};
 use crate::weather_api::alerts::{AlertSeverity, WeatherAlert};
 use crate::weather_api::forecast::{ForecastDay, ForecastResponse};
 use crate::weather_api::openweather_api::{
@@ -413,20 +413,68 @@ fn resolve_epoch_and_offset(rfc3339: &str, iana_zone_id: &str) -> (i64, i64) {
     (epoch, offset)
 }
 
+/// Builds the `currentConditions:lookup` query params -- a pure function so
+/// `languageCode` can be unit-tested without a live network call.
+fn current_conditions_query(
+    api_key: &str,
+    lat: f64,
+    lon: f64,
+    language_code: &str,
+) -> Vec<(&'static str, String)> {
+    vec![
+        ("key", api_key.to_string()),
+        ("location.latitude", lat.to_string()),
+        ("location.longitude", lon.to_string()),
+        ("unitsSystem", "METRIC".to_string()),
+        ("languageCode", language_code.to_string()),
+    ]
+}
+
+/// Builds the `forecast/days:lookup` query params. See
+/// `current_conditions_query`'s docs.
+fn forecast_days_query(
+    api_key: &str,
+    lat: f64,
+    lon: f64,
+    days: u8,
+    language_code: &str,
+) -> Vec<(&'static str, String)> {
+    vec![
+        ("key", api_key.to_string()),
+        ("location.latitude", lat.to_string()),
+        ("location.longitude", lon.to_string()),
+        ("unitsSystem", "METRIC".to_string()),
+        ("days", days.to_string()),
+        ("languageCode", language_code.to_string()),
+    ]
+}
+
+/// Builds the `publicAlerts:lookup` query params. See
+/// `current_conditions_query`'s docs.
+fn public_alerts_query(
+    api_key: &str,
+    lat: f64,
+    lon: f64,
+    language_code: &str,
+) -> Vec<(&'static str, String)> {
+    vec![
+        ("key", api_key.to_string()),
+        ("location.latitude", lat.to_string()),
+        ("location.longitude", lon.to_string()),
+        ("languageCode", language_code.to_string()),
+    ]
+}
+
 async fn fetch_current_conditions(
     client: &reqwest::Client,
     api_key: &str,
     lat: f64,
     lon: f64,
+    language_code: &str,
 ) -> Result<CurrentConditionsResponse, ApiError> {
     let response = client
         .get(format!("{WEATHER_API_BASE}/currentConditions:lookup"))
-        .query(&[
-            ("key", api_key.to_string()),
-            ("location.latitude", lat.to_string()),
-            ("location.longitude", lon.to_string()),
-            ("unitsSystem", "METRIC".to_string()),
-        ])
+        .query(&current_conditions_query(api_key, lat, lon, language_code))
         .send()
         .await
         .map_err(ApiError::RequestFailed)?;
@@ -454,16 +502,11 @@ async fn fetch_forecast_days(
     lat: f64,
     lon: f64,
     days: u8,
+    language_code: &str,
 ) -> Result<ForecastDaysResponse, ApiError> {
     let response = client
         .get(format!("{WEATHER_API_BASE}/forecast/days:lookup"))
-        .query(&[
-            ("key", api_key.to_string()),
-            ("location.latitude", lat.to_string()),
-            ("location.longitude", lon.to_string()),
-            ("unitsSystem", "METRIC".to_string()),
-            ("days", days.to_string()),
-        ])
+        .query(&forecast_days_query(api_key, lat, lon, days, language_code))
         .send()
         .await
         .map_err(ApiError::RequestFailed)?;
@@ -484,14 +527,11 @@ async fn fetch_public_alerts(
     api_key: &str,
     lat: f64,
     lon: f64,
+    language_code: &str,
 ) -> Result<PublicAlertsResponse, ApiError> {
     let response = client
         .get(format!("{WEATHER_API_BASE}/publicAlerts:lookup"))
-        .query(&[
-            ("key", api_key.to_string()),
-            ("location.latitude", lat.to_string()),
-            ("location.longitude", lon.to_string()),
-        ])
+        .query(&public_alerts_query(api_key, lat, lon, language_code))
         .send()
         .await
         .map_err(ApiError::RequestFailed)?;
@@ -538,6 +578,7 @@ fn map_forecast_day(item: &ForecastDayItem) -> ForecastDay {
 /// Platform's Weather API.
 pub struct GoogleWeatherProvider {
     api_key: String,
+    language: Language,
     /// Reused across every request this provider makes (geocoding, current
     /// conditions, forecast) rather than building a fresh `reqwest::Client`
     /// per call -- a `Client` holds a connection pool internally, so
@@ -548,10 +589,12 @@ pub struct GoogleWeatherProvider {
 
 impl GoogleWeatherProvider {
     /// Creates a new `GoogleWeatherProvider` with the given Google Cloud API
-    /// key (must have the Weather API enabled on its project).
-    pub fn new(api_key: String) -> Self {
+    /// key (must have the Weather API enabled on its project) and the
+    /// language to request weather descriptions in.
+    pub fn new(api_key: String, language: Language) -> Self {
         Self {
             api_key,
+            language,
             client: reqwest::Client::new(),
         }
     }
@@ -561,11 +604,14 @@ impl GoogleWeatherProvider {
 impl WeatherProvider for GoogleWeatherProvider {
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError> {
         let (lat, lon) = geocode(&self.client, location).await?;
+        let language_code = self.language.google_code();
 
-        let current = fetch_current_conditions(&self.client, &self.api_key, lat, lon).await?;
+        let current =
+            fetch_current_conditions(&self.client, &self.api_key, lat, lon, language_code).await?;
         // Sunrise/sunset and today's min/max only come from the daily
         // forecast, not currentConditions -- see the module doc.
-        let forecast = fetch_forecast_days(&self.client, &self.api_key, lat, lon, 1).await?;
+        let forecast =
+            fetch_forecast_days(&self.client, &self.api_key, lat, lon, 1, language_code).await?;
         let today = forecast
             .forecast_days
             .first()
@@ -603,8 +649,15 @@ impl WeatherProvider for GoogleWeatherProvider {
 
     async fn get_forecast(&self, location: &LocationConfig) -> Result<ForecastResponse, ApiError> {
         let (lat, lon) = geocode(&self.client, location).await?;
-        let forecast =
-            fetch_forecast_days(&self.client, &self.api_key, lat, lon, FORECAST_DAYS).await?;
+        let forecast = fetch_forecast_days(
+            &self.client,
+            &self.api_key,
+            lat,
+            lon,
+            FORECAST_DAYS,
+            self.language.google_code(),
+        )
+        .await?;
 
         Ok(ForecastResponse {
             location_name: location.city.clone(),
@@ -618,7 +671,14 @@ impl WeatherProvider for GoogleWeatherProvider {
 
     async fn get_alerts(&self, location: &LocationConfig) -> Result<Vec<WeatherAlert>, ApiError> {
         let (lat, lon) = geocode(&self.client, location).await?;
-        let alerts_response = fetch_public_alerts(&self.client, &self.api_key, lat, lon).await?;
+        let alerts_response = fetch_public_alerts(
+            &self.client,
+            &self.api_key,
+            lat,
+            lon,
+            self.language.google_code(),
+        )
+        .await?;
 
         let alerts = alerts_response
             .public_alerts
@@ -678,6 +738,25 @@ mod tests {
     fn test_unit_conversions() {
         assert!((kmh_to_mps(3.6) - 1.0).abs() < 1e-9);
         assert!((km_to_meters(10.0) - 10_000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_current_conditions_query_includes_language_code() {
+        let query = current_conditions_query("test-key", 1.0, 2.0, "fr");
+        assert!(query.contains(&("languageCode", "fr".to_string())));
+    }
+
+    #[test]
+    fn test_forecast_days_query_includes_language_code() {
+        let query = forecast_days_query("test-key", 1.0, 2.0, 5, "ko");
+        assert!(query.contains(&("languageCode", "ko".to_string())));
+        assert!(query.contains(&("days", "5".to_string())));
+    }
+
+    #[test]
+    fn test_public_alerts_query_includes_language_code() {
+        let query = public_alerts_query("test-key", 1.0, 2.0, "hi");
+        assert!(query.contains(&("languageCode", "hi".to_string())));
     }
 
     #[test]

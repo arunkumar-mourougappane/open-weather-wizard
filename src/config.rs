@@ -71,6 +71,91 @@ impl std::fmt::Display for ThemePreference {
     }
 }
 
+/// A curated set of languages weather descriptions can be requested in --
+/// intentionally a closed enum, not a free-text BCP-47 field, so a typo
+/// can't silently fall back to English with no explanation (see issue #48).
+/// Codes are provider-specific: OpenWeatherMap's `lang` parameter isn't
+/// strictly BCP-47 (notably Korean is `kr`, not ISO 639-1's `ko`), while
+/// Google Weather's `languageCode` is BCP-47 -- `openweather_code`/
+/// `google_code` return whichever code that provider actually expects.
+/// Every other language in this curated set happens to share the same
+/// two-letter code across both providers.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Language {
+    #[default]
+    English,
+    Spanish,
+    French,
+    German,
+    Italian,
+    Portuguese,
+    Russian,
+    Japanese,
+    Korean,
+    Arabic,
+    Hindi,
+    Dutch,
+}
+
+impl Language {
+    /// The code OpenWeatherMap's `lang` query parameter expects.
+    pub fn openweather_code(&self) -> &'static str {
+        match self {
+            Self::English => "en",
+            Self::Spanish => "es",
+            Self::French => "fr",
+            Self::German => "de",
+            Self::Italian => "it",
+            Self::Portuguese => "pt",
+            Self::Russian => "ru",
+            Self::Japanese => "ja",
+            Self::Korean => "kr",
+            Self::Arabic => "ar",
+            Self::Hindi => "hi",
+            Self::Dutch => "nl",
+        }
+    }
+
+    /// The BCP-47 code Google Weather's `languageCode` query parameter
+    /// expects.
+    pub fn google_code(&self) -> &'static str {
+        match self {
+            Self::English => "en",
+            Self::Spanish => "es",
+            Self::French => "fr",
+            Self::German => "de",
+            Self::Italian => "it",
+            Self::Portuguese => "pt",
+            Self::Russian => "ru",
+            Self::Japanese => "ja",
+            Self::Korean => "ko",
+            Self::Arabic => "ar",
+            Self::Hindi => "hi",
+            Self::Dutch => "nl",
+        }
+    }
+}
+
+impl std::fmt::Display for Language {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::English => "English",
+            Self::Spanish => "Spanish",
+            Self::French => "French",
+            Self::German => "German",
+            Self::Italian => "Italian",
+            Self::Portuguese => "Portuguese",
+            Self::Russian => "Russian",
+            Self::Japanese => "Japanese",
+            Self::Korean => "Korean",
+            Self::Arabic => "Arabic",
+            Self::Hindi => "Hindi",
+            Self::Dutch => "Dutch",
+        };
+        write!(f, "{name}")
+    }
+}
+
 /// A struct representing the user's configured location.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationConfig {
@@ -114,6 +199,13 @@ pub struct AppConfig {
     /// default per-provider rates.
     #[serde(default)]
     pub refresh_interval_secs: Option<u64>,
+    /// The language weather *descriptions* ("clear sky", "light rain") are
+    /// requested in from whichever provider is active -- not a UI
+    /// localization setting, see `Language`'s docs. `#[serde(default)]` so
+    /// config files saved before this field existed default to
+    /// `Language::English`, matching both providers' own default.
+    #[serde(default)]
+    pub language: Language,
     /// Present only to read config files saved by older versions of this
     /// app, which stored the API token base64-"encoded" (not encrypted)
     /// directly here. `#[serde(skip_serializing)]` means this is never
@@ -145,6 +237,7 @@ impl Default for AppConfig {
             use_fahrenheit: false,
             launch_at_login: false,
             refresh_interval_secs: None,
+            language: Language::default(),
             legacy_api_token_encoded: None,
             legacy_dark_mode: None,
         }

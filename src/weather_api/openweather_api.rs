@@ -16,7 +16,7 @@
 //! - **Provider Implementation**: Implements the `WeatherProvider` trait for seamless
 //!   integration into the application's provider factory.
 //!
-use crate::config::LocationConfig;
+use crate::config::{Language, LocationConfig};
 use crate::weather_api::weather_provider::{WeatherProvider, location_config_to_location};
 use async_trait::async_trait;
 use reqwest;
@@ -213,6 +213,21 @@ async fn resolve_location(location: &Location, api_key: &str) -> Result<Location
     })
 }
 
+/// Builds the `data/2.5/weather` request URL -- a pure function so the
+/// `lang` query param can be unit-tested without a live network call.
+fn weather_url(lat: f64, lon: f64, api_key: &str, lang: &str) -> String {
+    format!(
+        "https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang={lang}"
+    )
+}
+
+/// Builds the `data/2.5/forecast` request URL. See `weather_url`'s docs.
+fn forecast_url(lat: f64, lon: f64, api_key: &str, lang: &str) -> String {
+    format!(
+        "https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric&lang={lang}"
+    )
+}
+
 /// Fetches weather data for a given location using the OpenWeatherMap API.
 ///
 /// This is a two-step process:
@@ -222,15 +237,18 @@ async fn resolve_location(location: &Location, api_key: &str) -> Result<Location
 /// # Arguments
 /// * `location` - The location to fetch weather for.
 /// * `api_key` - Your personal OpenWeatherMap API key.
-pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiResponse, ApiError> {
+/// * `lang` - The OpenWeatherMap `lang` code (see `Language::openweather_code`)
+///   to request the `description` field in. Only that field is translated;
+///   numeric fields are unaffected.
+pub async fn get_weather(
+    location: &Location,
+    api_key: &str,
+    lang: &str,
+) -> Result<ApiResponse, ApiError> {
     // Get coordinates for the location
     let weather_location = resolve_location(location, api_key).await?;
 
-    // Construct the API URL. We use metric units for Celsius.
-    let url = format!(
-        "https://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}&units=metric",
-        weather_location.lat, weather_location.lon, api_key
-    );
+    let url = weather_url(weather_location.lat, weather_location.lon, api_key, lang);
 
     // Make the asynchronous GET request
     let response = reqwest::get(&url).await.map_err(ApiError::RequestFailed)?;
@@ -255,16 +273,15 @@ pub async fn get_weather(location: &Location, api_key: &str) -> Result<ApiRespon
 /// # Arguments
 /// * `location` - The location to fetch a forecast for.
 /// * `api_key` - Your personal OpenWeatherMap API key.
+/// * `lang` - See `get_weather`'s docs.
 pub async fn get_forecast(
     location: &Location,
     api_key: &str,
+    lang: &str,
 ) -> Result<crate::weather_api::forecast::ForecastResponse, ApiError> {
     let weather_location = resolve_location(location, api_key).await?;
 
-    let url = format!(
-        "https://api.openweathermap.org/data/2.5/forecast?lat={}&lon={}&appid={}&units=metric",
-        weather_location.lat, weather_location.lon, api_key
-    );
+    let url = forecast_url(weather_location.lat, weather_location.lon, api_key, lang);
 
     let response = reqwest::get(&url).await.map_err(ApiError::RequestFailed)?;
     log::debug!("Forecast API response: {}", response.status());
@@ -314,6 +331,7 @@ pub fn get_weather_symbol(weather_condition: &str) -> WeatherSymbol {
 /// An implementation of the `WeatherProvider` trait for the OpenWeatherMap service.
 pub struct OpenWeatherProvider {
     api_key: String,
+    language: Language,
 }
 
 impl OpenWeatherProvider {
@@ -321,8 +339,9 @@ impl OpenWeatherProvider {
     ///
     /// # Arguments
     /// * `api_key` - The API key for the OpenWeatherMap service.
-    pub fn new(api_key: String) -> Self {
-        Self { api_key }
+    /// * `language` - The language to request weather descriptions in.
+    pub fn new(api_key: String, language: Language) -> Self {
+        Self { api_key, language }
     }
 }
 
@@ -334,7 +353,12 @@ impl WeatherProvider for OpenWeatherProvider {
     /// struct suitable for the API and then calls the internal `get_weather` function.
     async fn get_weather(&self, location: &LocationConfig) -> Result<ApiResponse, ApiError> {
         let api_location = location_config_to_location(location);
-        get_weather(&api_location, &self.api_key).await
+        get_weather(
+            &api_location,
+            &self.api_key,
+            self.language.openweather_code(),
+        )
+        .await
     }
 
     /// Fetches a forecast by implementing the `WeatherProvider` trait.
@@ -343,13 +367,33 @@ impl WeatherProvider for OpenWeatherProvider {
         location: &LocationConfig,
     ) -> Result<crate::weather_api::forecast::ForecastResponse, ApiError> {
         let api_location = location_config_to_location(location);
-        get_forecast(&api_location, &self.api_key).await
+        get_forecast(
+            &api_location,
+            &self.api_key,
+            self.language.openweather_code(),
+        )
+        .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_weather_url_includes_language_code() {
+        let url = weather_url(1.0, 2.0, "test-key", "es");
+        assert!(url.contains("lang=es"));
+        assert!(url.contains("units=metric"));
+    }
+
+    #[test]
+    fn test_forecast_url_includes_language_code() {
+        // Korean uses OpenWeatherMap's own "kr" code, not ISO 639-1's "ko" --
+        // see `Language::openweather_code`'s docs.
+        let url = forecast_url(1.0, 2.0, "test-key", "kr");
+        assert!(url.contains("lang=kr"));
+    }
 
     #[test]
     fn test_get_weather_symbol_known_conditions() {

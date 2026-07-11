@@ -54,6 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider = WeatherProviderFactory::create_provider(
         &WeatherApiProvider::OpenWeather,
         Some(api_key.to_string()),
+        config.language,
     )?;
 
     match provider.get_weather(&config.location).await {

@@ -10,7 +10,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Font, Length, font};
 
-use crate::config::{AppConfig, ThemePreference, WeatherApiProvider};
+use crate::config::{AppConfig, Language, ThemePreference, WeatherApiProvider};
 use crate::ui::style;
 
 const BOLD: Font = Font {
@@ -27,6 +27,21 @@ const THEME_PREFERENCES: [ThemePreference; 3] = [
     ThemePreference::Light,
     ThemePreference::Dark,
     ThemePreference::System,
+];
+
+const LANGUAGES: [Language; 12] = [
+    Language::English,
+    Language::Spanish,
+    Language::French,
+    Language::German,
+    Language::Italian,
+    Language::Portuguese,
+    Language::Russian,
+    Language::Japanese,
+    Language::Korean,
+    Language::Arabic,
+    Language::Hindi,
+    Language::Dutch,
 ];
 
 /// Presets for the auto-refresh polling interval, offered as a pick list
@@ -102,6 +117,9 @@ pub struct State {
     pub city_input: String,
     pub state_input: String,
     pub country_input: String,
+    /// The language weather descriptions are requested in -- not a UI
+    /// localization setting, see `Language`'s docs.
+    pub language: Language,
     pub theme_preference: ThemePreference,
     pub use_fahrenheit: bool,
     pub launch_at_login: bool,
@@ -152,6 +170,7 @@ impl State {
             city_input: config.location.city.clone(),
             state_input: config.location.state.clone(),
             country_input: config.location.country.clone(),
+            language: config.language,
             theme_preference: config.theme_preference,
             use_fahrenheit: config.use_fahrenheit,
             launch_at_login: config.launch_at_login,
@@ -182,6 +201,7 @@ impl State {
         config.location.city = self.city_input.clone();
         config.location.state = self.state_input.clone();
         config.location.country = self.country_input.clone();
+        config.language = self.language;
         config.theme_preference = self.theme_preference;
         config.use_fahrenheit = self.use_fahrenheit;
         config.launch_at_login = self.launch_at_login;
@@ -229,6 +249,7 @@ pub enum Message {
     CityChanged(String),
     StateChanged(String),
     CountryChanged(String),
+    LanguageSelected(Language),
     ThemePreferenceSelected(ThemePreference),
     UnitsToggled(bool),
     LaunchAtLoginToggled(bool),
@@ -266,6 +287,7 @@ pub fn update(state: &mut State, message: Message) {
         Message::CityChanged(value) => state.city_input = value,
         Message::StateChanged(value) => state.state_input = value,
         Message::CountryChanged(value) => state.country_input = value,
+        Message::LanguageSelected(value) => state.language = value,
         Message::ThemePreferenceSelected(value) => state.theme_preference = value,
         Message::UnitsToggled(value) => state.use_fahrenheit = value,
         Message::LaunchAtLoginToggled(value) => state.launch_at_login = value,
@@ -308,6 +330,16 @@ pub fn view(state: &State) -> Element<'_, Message> {
                 PROVIDERS,
                 Some(state.provider.clone()),
                 Message::ProviderSelected
+            )
+            .style(style::pick_list)
+            .into()
+        ),
+        labeled_row(
+            "Language:",
+            pick_list(
+                &LANGUAGES[..],
+                Some(state.language),
+                Message::LanguageSelected
             )
             .style(style::pick_list)
             .into()

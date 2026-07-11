@@ -48,8 +48,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test Google Weather (mockup)
     println!("   Testing Google Weather Provider...");
-    let provider =
-        WeatherProviderFactory::create_provider(&WeatherApiProvider::GoogleWeather, None)?;
+    let provider = WeatherProviderFactory::create_provider(
+        &WeatherApiProvider::GoogleWeather,
+        None,
+        config.language,
+    )?;
 
     let weather_result = provider.get_weather(&config.location).await;
     match weather_result {
