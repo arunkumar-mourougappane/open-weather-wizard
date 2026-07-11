@@ -482,6 +482,14 @@ fn sync_tray_tooltip(state: &AppState) {
 }
 
 pub fn boot() -> (AppState, Task<Message>) {
+    // `window::Settings::icon` below is a no-op on macOS (see
+    // `icons::set_dock_icon_macos`'s docs) -- this is what actually gets a
+    // correct Dock icon for a bare `cargo run`/`cargo build` dev binary
+    // rather than a generic executable icon. Packaged release builds get
+    // theirs from `packaging/macos/Info.plist`'s `.icns` regardless.
+    #[cfg(target_os = "macos")]
+    icons::set_dock_icon_macos("icon/icon.png");
+
     let config_manager = ConfigManager::new().expect("Failed to create config manager");
     let is_first_run = !config_manager.config_exists();
     let config = config_manager.load_config();
@@ -689,13 +697,42 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             // opposed to a push-based `winit::event_loop::EventLoopProxy`
             // integration) works here at all.
             while let Ok(event) = TrayIconEvent::receiver().try_recv() {
-                if let TrayIconEvent::Click {
-                    button: MouseButton::Left,
+                let TrayIconEvent::Click {
+                    button,
                     button_state: MouseButtonState::Up,
                     ..
                 } = event
-                {
-                    return window::gain_focus(state.main_window);
+                else {
+                    continue;
+                };
+                match button {
+                    MouseButton::Left => {
+                        // `gain_focus` alone documents itself as a no-op if
+                        // the window is minimized or not visible -- exactly
+                        // the state a user clicking the tray icon is most
+                        // likely trying to recover from (including a main
+                        // window closed via `WindowCloseRequested`, which
+                        // now minimizes rather than exits while a tray icon
+                        // exists -- see that handler), so un-minimize first
+                        // unconditionally (harmless if it wasn't).
+                        return Task::batch([
+                            window::minimize(state.main_window, false),
+                            window::gain_focus(state.main_window),
+                        ]);
+                    }
+                    MouseButton::Right => {
+                        // The only way to quit once closing the main
+                        // window no longer does (see `WindowCloseRequested`)
+                        // -- the `tray` crate has no context-menu API to
+                        // offer a proper "Quit" item instead, so right-click
+                        // is it. Not `Message::WindowCloseRequested`
+                        // (would just re-minimize) or `window::close` (this
+                        // isn't a specific window's concern) -- an outright
+                        // `iced::exit()` is what a menu's "Quit" item would
+                        // ultimately have done anyway.
+                        return iced::exit();
+                    }
+                    MouseButton::Middle => {}
                 }
             }
             Task::none()
@@ -717,7 +754,24 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
         }
         Message::WindowCloseRequested(id) => {
             if id == state.main_window {
-                return iced::exit();
+                // With a tray icon present, closing the main window tucks
+                // it away into the tray rather than quitting outright --
+                // the whole point of "a lightweight, persistent way to see
+                // current conditions without the full main window open"
+                // (issue #56) is that closing the window is a normal thing
+                // to do, not the same as quitting. `window::close` would
+                // destroy the window outright (no way to reopen it under
+                // the same `window::Id`), so this minimizes instead; the
+                // tray icon's left-click handler already knows how to
+                // un-minimize and focus it back. Falls back to actually
+                // quitting if the tray icon failed to create (`build_tray_icon`)
+                // -- with no tray, there'd be no way to ever get the window
+                // back otherwise.
+                return if state.tray_icon.is_some() {
+                    window::minimize(state.main_window, true)
+                } else {
+                    iced::exit()
+                };
             }
             if state.prefs_window == Some(id) {
                 state.prefs_window = None;
