@@ -82,6 +82,10 @@ pub struct AppConfig {
     /// so toggling this doesn't trigger a re-fetch.
     #[serde(default)]
     pub use_fahrenheit: bool,
+    /// Whether the app should automatically start when the user logs in.
+    /// `#[serde(default)]` so older config files default to `false`.
+    #[serde(default)]
+    pub launch_at_login: bool,
     /// The user-configured auto-refresh interval in seconds.
     /// `#[serde(default)]` ensures missing values default to None, retaining
     /// default per-provider rates.
@@ -106,6 +110,7 @@ impl Default for AppConfig {
             location: LocationConfig::default(),
             dark_mode: false,
             use_fahrenheit: false,
+            launch_at_login: false,
             refresh_interval_secs: None,
             legacy_api_token_encoded: None,
         }
@@ -161,6 +166,26 @@ impl AppConfig {
             Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(format!("Failed to delete API token: {e}")),
         }
+    }
+
+    /// Applies the `launch_at_login` preference to the OS.
+    pub fn update_auto_launch(&self) -> Result<(), String> {
+        let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        
+        let auto = auto_launch::AutoLaunchBuilder::new()
+            .set_app_name("open-weather-wizard")
+            .set_app_path(&current_exe.to_string_lossy())
+            .set_macos_launch_mode(auto_launch::MacOSLaunchMode::LaunchAgent)
+            .build()
+            .map_err(|e| e.to_string())?;
+
+        if self.launch_at_login {
+            auto.enable().map_err(|e| e.to_string())?;
+        } else {
+            let _ = auto.disable();
+        }
+        
+        Ok(())
     }
 }
 
