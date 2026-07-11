@@ -18,6 +18,7 @@ use crate::ui::temperature::{
     pressure_to_display, pressure_unit, speed_to_display, speed_unit, unit_symbol,
 };
 use crate::ui::{about, main_screen, preferences, transition};
+use crate::weather_api::alerts::WeatherAlert;
 use crate::weather_api::forecast::ForecastResponse;
 use crate::weather_api::openweather_api::ApiResponse;
 use crate::weather_api::weather_provider::WeatherProviderFactory;
@@ -110,9 +111,10 @@ impl ForecastStatus {
 /// shared-closure problem the GTK version solved with a mutex doesn't exist here.
 pub struct AppState {
     pub config: AppConfig,
-    config_manager: ConfigManager,
+    pub config_manager: ConfigManager,
     pub weather: WeatherStatus,
     pub forecast: ForecastStatus,
+    pub alerts: Vec<WeatherAlert>,
     /// When `weather` last transitioned to `Loaded`, for the "Updated Xs ago"
     /// label. `main_screen` re-renders often enough (via `AnimationTick`,
     /// already needed for the animated icons) that this stays fresh without
@@ -145,6 +147,7 @@ pub enum Message {
     Tick(#[allow(dead_code)] std::time::Instant),
     WeatherFetched(Result<ApiResponse, String>),
     ForecastFetched(Result<ForecastResponse, String>),
+    AlertsFetched(Result<Vec<WeatherAlert>, String>),
 
     OpenPreferences,
     OpenAbout,
@@ -223,6 +226,25 @@ fn fetch_forecast_task(config: &AppConfig) -> Task<Message> {
                 .map_err(|e| format!("{:?}", e))
         },
         Message::ForecastFetched,
+    )
+}
+
+/// Builds a `Task` that fetches active weather alerts.
+fn fetch_alerts_task(config: &AppConfig) -> Task<Message> {
+    let provider_type = config.weather_provider.clone();
+    let location = config.location.clone();
+    let config = config.clone();
+
+    Task::perform(
+        async move {
+            let token = config.get_api_token().ok();
+            let provider = WeatherProviderFactory::create_provider(&provider_type, token)?;
+            provider
+                .get_alerts(&location)
+                .await
+                .map_err(|e| format!("{:?}", e))
+        },
+        Message::AlertsFetched,
     )
 }
 
@@ -348,13 +370,18 @@ pub fn boot() -> (AppState, Task<Message>) {
         (
             None,
             None,
-            Task::batch([fetch_weather_task(&config), fetch_forecast_task(&config)]),
+            Task::batch([
+                fetch_weather_task(&config),
+                fetch_forecast_task(&config),
+                fetch_alerts_task(&config),
+            ]),
         )
     };
 
     let state = AppState {
         weather: WeatherStatus::Loading,
         forecast: ForecastStatus::Loading,
+        alerts: vec![],
         last_updated: None,
         value_tracker: transition::ValueTracker::default(),
         selected_forecast_day: None,
@@ -391,6 +418,7 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
             Task::batch([
                 fetch_weather_task(&state.config),
                 fetch_forecast_task(&state.config),
+                fetch_alerts_task(&state.config),
             ])
         }
         Message::WeatherFetched(Ok(response)) => {
@@ -449,6 +477,15 @@ pub fn update(state: &mut AppState, message: Message) -> Task<Message> {
                     ForecastStatus::Error
                 }
             };
+            Task::none()
+        }
+        Message::AlertsFetched(Ok(alerts)) => {
+            state.alerts = alerts;
+            Task::none()
+        }
+        Message::AlertsFetched(Err(error)) => {
+            log::warn!("Alerts fetch failed: {error}");
+            // We retain existing alerts on failure, or could clear them. Keeping them for now.
             Task::none()
         }
         Message::OpenPreferences => {

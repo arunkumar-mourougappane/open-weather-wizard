@@ -9,6 +9,7 @@
 //! - `openweather_api`: Contains the implementation for the real OpenWeatherMap API.
 //! - `google_weather_api`: Contains a mock implementation for a "Google Weather" API, used for testing and demonstration.
 //! - `forecast`: Data model and aggregation logic for multi-day forecasts.
+pub mod alerts;
 pub mod forecast;
 pub mod google_weather_api;
 pub mod openweather_api;

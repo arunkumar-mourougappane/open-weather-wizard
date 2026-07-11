@@ -26,6 +26,7 @@
 //! that zone id at that instant.
 
 use crate::config::LocationConfig;
+use crate::weather_api::alerts::{AlertSeverity, WeatherAlert};
 use crate::weather_api::forecast::{ForecastDay, ForecastResponse};
 use crate::weather_api::openweather_api::{
     ApiError, ApiResponse, Main, Sys, Weather, Wind, get_weather_symbol,
@@ -292,6 +293,44 @@ struct ForecastDaysResponse {
     time_zone: GTimeZone,
 }
 
+// --- Google Weather Alerts types ----------------------------------------
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct GAlert {
+    #[serde(default)]
+    alert_id: String,
+    #[serde(default)]
+    alert_title: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    event_type: String,
+    #[serde(default)]
+    severity: String,
+    #[serde(default)]
+    certainty: String,
+    #[serde(default)]
+    urgency: String,
+    #[serde(default)]
+    start_time: String,
+    #[serde(default)]
+    expiration_time: String,
+    #[serde(default)]
+    area_name: String,
+    #[serde(default)]
+    instruction: Vec<String>,
+    #[serde(default)]
+    safety_recommendations: Vec<String>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct PublicAlertsResponse {
+    #[serde(default)]
+    public_alerts: Vec<GAlert>,
+}
+
 // --- Unit conversions -----------------------------------------------------
 // Google's METRIC unit system (requested explicitly below) returns wind
 // speed in km/h and visibility in km; the shared `Wind`/visibility fields
@@ -440,6 +479,34 @@ async fn fetch_forecast_days(
     })
 }
 
+async fn fetch_public_alerts(
+    client: &reqwest::Client,
+    api_key: &str,
+    lat: f64,
+    lon: f64,
+) -> Result<PublicAlertsResponse, ApiError> {
+    let response = client
+        .get(format!("{WEATHER_API_BASE}/publicAlerts:lookup"))
+        .query(&[
+            ("key", api_key.to_string()),
+            ("location.latitude", lat.to_string()),
+            ("location.longitude", lon.to_string()),
+        ])
+        .send()
+        .await
+        .map_err(ApiError::RequestFailed)?;
+
+    if !response.status().is_success() {
+        log::error!("Google publicAlerts request failed: {}", response.status());
+        return Err(ApiError::CityNotFound); // Keep uniform error mapping for now
+    }
+
+    response.json::<PublicAlertsResponse>().await.map_err(|e| {
+        log::error!("Failed to parse Google publicAlerts response: {e}");
+        ApiError::InvalidResponse
+    })
+}
+
 fn map_forecast_day(item: &ForecastDayItem) -> ForecastDay {
     let day = &item.daytime_forecast;
     ForecastDay {
@@ -547,6 +614,43 @@ impl WeatherProvider for GoogleWeatherProvider {
                 .map(map_forecast_day)
                 .collect(),
         })
+    }
+
+    async fn get_alerts(&self, location: &LocationConfig) -> Result<Vec<WeatherAlert>, ApiError> {
+        let (lat, lon) = geocode(&self.client, location).await?;
+        let alerts_response = fetch_public_alerts(&self.client, &self.api_key, lat, lon).await?;
+
+        let alerts = alerts_response
+            .public_alerts
+            .into_iter()
+            .map(|g_alert| {
+                let severity = match g_alert.severity.as_str() {
+                    "EXTREME" => AlertSeverity::Extreme,
+                    "SEVERE" => AlertSeverity::Severe,
+                    "MODERATE" => AlertSeverity::Moderate,
+                    "MINOR" => AlertSeverity::Minor,
+                    _ => AlertSeverity::UnknownSeverity,
+                };
+
+                let (start_time, _) = resolve_epoch_and_offset(&g_alert.start_time, "UTC");
+                let (end_time, _) = resolve_epoch_and_offset(&g_alert.expiration_time, "UTC");
+
+                WeatherAlert {
+                    id: g_alert.alert_id,
+                    title: g_alert.alert_title,
+                    description: g_alert.description,
+                    event_type: g_alert.event_type,
+                    severity,
+                    start_time,
+                    end_time,
+                    urgency: g_alert.urgency,
+                    certainty: g_alert.certainty,
+                    instruction: g_alert.instruction,
+                }
+            })
+            .collect();
+
+        Ok(alerts)
     }
 }
 
@@ -706,5 +810,34 @@ mod tests {
         let (epoch, offset) = resolve_epoch_and_offset("not-a-timestamp", "America/Chicago");
         assert_eq!(epoch, 0);
         assert_eq!(offset, 0);
+    }
+
+    #[test]
+    fn test_public_alerts_deserialize_and_map() {
+        let json = r#"{
+            "publicAlerts": [
+                {
+                    "alertId": "12345",
+                    "alertTitle": "Severe Thunderstorm Warning",
+                    "description": "A severe thunderstorm warning is in effect.",
+                    "eventType": "SEVERE_THUNDERSTORM",
+                    "severity": "SEVERE",
+                    "certainty": "OBSERVED",
+                    "urgency": "IMMEDIATE",
+                    "startTime": "2026-07-04T11:00:00Z",
+                    "expirationTime": "2026-07-04T12:00:00Z",
+                    "areaName": "Peoria County",
+                    "instruction": ["Take cover immediately."],
+                    "safetyRecommendations": ["Stay indoors."]
+                }
+            ]
+        }"#;
+        let parsed: PublicAlertsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.public_alerts.len(), 1);
+        let alert = &parsed.public_alerts[0];
+        assert_eq!(alert.alert_title, "Severe Thunderstorm Warning");
+        assert_eq!(alert.severity, "SEVERE");
+        assert_eq!(alert.start_time, "2026-07-04T11:00:00Z");
+        assert_eq!(alert.instruction[0], "Take cover immediately.");
     }
 }
