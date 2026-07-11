@@ -1,20 +1,15 @@
 use serde::{Deserialize, Serialize};
 
 /// Severity of a weather alert.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum AlertSeverity {
+    #[default]
     UnknownSeverity,
     Minor,
     Moderate,
     Severe,
     Extreme,
-}
-
-impl Default for AlertSeverity {
-    fn default() -> Self {
-        Self::UnknownSeverity
-    }
 }
 
 /// A weather alert (e.g., severe thunderstorm warning) for a specific location.
@@ -31,5 +26,7 @@ pub struct WeatherAlert {
     pub end_time: i64,
     pub urgency: String,
     pub certainty: String,
+    pub area_name: String,
     pub instruction: Vec<String>,
+    pub safety_recommendations: Vec<String>,
 }

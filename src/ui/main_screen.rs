@@ -7,7 +7,7 @@
 use std::time::Instant;
 
 use iced::widget::{button, column, container, row, scrollable, space, text, tooltip};
-use iced::{font, Alignment, Color, Element, Font, Length, Theme};
+use iced::{Alignment, Color, Element, Font, Length, Theme, font};
 
 use crate::app::{AppState, ForecastStatus, Message, WeatherStatus};
 use crate::config::WeatherApiProvider;
@@ -180,44 +180,64 @@ fn alerts_view(alerts: &[WeatherAlert]) -> Element<'_, Message> {
     if alerts.is_empty() {
         return iced::widget::Space::new().into();
     }
-    
+
     let mut layout = column![].spacing(8).width(Length::Fill);
-    
+
     for alert in alerts {
-        let (icon, _) = match alert.severity {
-            AlertSeverity::Extreme | AlertSeverity::Severe => ("\u{26A0}", ()), // Warning sign
-            _ => ("\u{24D8}", ()), // Info sign
+        let is_severe = matches!(
+            alert.severity,
+            AlertSeverity::Extreme | AlertSeverity::Severe
+        );
+        let icon = if is_severe { "\u{26A0}" } else { "\u{24D8}" };
+        let text_style = if is_severe {
+            style::danger
+        } else {
+            style::warning
         };
 
-        let alert_banner = container(
+        let mut banner_content = column![
             row![
-                text(icon).size(16).style(style::danger),
-                text(&alert.title).size(14).font(BOLD).style(style::danger),
+                text(icon).size(16).style(text_style),
+                text(&alert.title).size(14).font(BOLD).style(text_style),
             ]
             .spacing(8)
             .align_y(Alignment::Center),
-        )
-        .padding(12)
-        .width(Length::Fill)
-        .style(move |theme: &Theme| {
-            let palette = theme.extended_palette();
-            container::Style {
-                background: Some(iced::Background::Color(Color {
-                    a: 0.1,
-                    ..palette.danger.base.color
-                })),
-                border: iced::Border {
-                    color: palette.danger.base.color,
-                    width: 1.0,
-                    radius: 8.0.into(),
-                },
-                ..container::Style::default()
+        ]
+        .spacing(6);
+
+        if !alert.safety_recommendations.is_empty() {
+            for recommendation in &alert.safety_recommendations {
+                banner_content =
+                    banner_content.push(text(recommendation).size(12).style(style::muted));
             }
-        });
-        
+        }
+
+        let alert_banner = container(banner_content)
+            .padding(12)
+            .width(Length::Fill)
+            .style(move |theme: &Theme| {
+                let accent_color = if is_severe {
+                    style::danger(theme).color.unwrap_or(Color::BLACK)
+                } else {
+                    style::warning(theme).color.unwrap_or(Color::BLACK)
+                };
+                container::Style {
+                    background: Some(iced::Background::Color(Color {
+                        a: 0.1,
+                        ..accent_color
+                    })),
+                    border: iced::Border {
+                        color: accent_color,
+                        width: 1.0,
+                        radius: 8.0.into(),
+                    },
+                    ..container::Style::default()
+                }
+            });
+
         layout = layout.push(alert_banner);
     }
-    
+
     layout.into()
 }
 

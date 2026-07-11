@@ -263,6 +263,15 @@ pub fn accent(_theme: &Theme) -> text::Style {
     }
 }
 
+/// Warning text (e.g. a Minor/Moderate weather alert) -- reuses
+/// `STAT_SUNRISE`'s amber for a "pay attention" tone one notch below
+/// `danger`'s red, since iced's `Theme` has no built-in warning palette.
+pub fn warning(_theme: &Theme) -> text::Style {
+    text::Style {
+        color: Some(STAT_SUNRISE),
+    }
+}
+
 /// Rounded corners for every `text_input` (API Token, City, State/Province,
 /// Country) -- otherwise identical to iced's own `text_input::default`.
 /// Uses fully-qualified paths rather than importing `iced::widget::text_input`

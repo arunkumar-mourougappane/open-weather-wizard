@@ -645,7 +645,9 @@ impl WeatherProvider for GoogleWeatherProvider {
                     end_time,
                     urgency: g_alert.urgency,
                     certainty: g_alert.certainty,
+                    area_name: g_alert.area_name,
                     instruction: g_alert.instruction,
+                    safety_recommendations: g_alert.safety_recommendations,
                 }
             })
             .collect();
@@ -838,6 +840,8 @@ mod tests {
         assert_eq!(alert.alert_title, "Severe Thunderstorm Warning");
         assert_eq!(alert.severity, "SEVERE");
         assert_eq!(alert.start_time, "2026-07-04T11:00:00Z");
+        assert_eq!(alert.area_name, "Peoria County");
         assert_eq!(alert.instruction[0], "Take cover immediately.");
+        assert_eq!(alert.safety_recommendations[0], "Stay indoors.");
     }
 }
